@@ -4,8 +4,8 @@ export default {
   theme: {
     extend: {
       fontFamily: {
-        body: ["Cormorant Garamond", "serif"],
-        display: ["Oswald", "sans-serif"]
+        body: ["Noto Sans", "sans-serif"],
+        display: ["Noto Serif", "serif"]
       }
     }
   },
