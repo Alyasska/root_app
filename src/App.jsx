@@ -883,7 +883,7 @@ export default function App() {
     if (coreStartIndex <= 0) {
       return [
         {
-          title: t.editionOutcasts,
+          title: t.editionCore,
           items: playbooks.map((pb, idx) => ({ pb, idx }))
         }
       ];
@@ -891,12 +891,12 @@ export default function App() {
 
     return [
       {
-        title: t.editionOutcasts,
-        items: playbooks.slice(0, coreStartIndex).map((pb, idx) => ({ pb, idx }))
-      },
-      {
         title: t.editionCore,
         items: playbooks.slice(coreStartIndex).map((pb, offset) => ({ pb, idx: coreStartIndex + offset }))
+      },
+      {
+        title: t.editionOutcasts,
+        items: playbooks.slice(0, coreStartIndex).map((pb, idx) => ({ pb, idx }))
       }
     ];
   }, [coreStartIndex, t.editionCore, t.editionOutcasts]);
@@ -919,6 +919,7 @@ export default function App() {
     currentState.image || (currentState.useDefaultPortrait ? defaultPortrait : null);
   const portraitLowToDisplay =
     currentState.image || (currentState.useDefaultPortrait ? defaultPortraitLow : null);
+  const hasCustomPortraitUpload = Boolean(currentState.image && !currentState.useDefaultPortrait);
 
   const activeBackground =
     selectedBgIndex >= 0 && selectedBgIndex < totalBackgrounds
@@ -1124,7 +1125,7 @@ export default function App() {
   };
 
   const handleRemoveBackgroundFromImage = async () => {
-    if (!portraitToDisplay || isRemovingBg) return;
+    if (!hasCustomPortraitUpload || !portraitToDisplay || isRemovingBg) return;
 
     setIsRemovingBg(true);
 
@@ -1198,7 +1199,9 @@ export default function App() {
   };
 
   const clearBackground = () => setSelectedBgIndex(-1);
-  const canRestoreRemovedBackground = Boolean(currentState.bgRemovalBackup && portraitToDisplay);
+  const canRestoreRemovedBackground = Boolean(
+    hasCustomPortraitUpload && currentState.bgRemovalBackup && portraitToDisplay
+  );
 
   const handleStatIncrease = (stat) => {
     if (!currentState.bonusStat && playbook.stats[stat] < 2) {
@@ -1445,7 +1448,7 @@ export default function App() {
                     </label>
                   )}
 
-                  {portraitToDisplay && (
+                  {hasCustomPortraitUpload && (
                     <button
                       onClick={canRestoreRemovedBackground ? handleRestoreBackgroundToImage : handleRemoveBackgroundFromImage}
                       disabled={isRemovingBg}
