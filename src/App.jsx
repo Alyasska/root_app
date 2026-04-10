@@ -1413,18 +1413,32 @@ export default function App() {
                   {portraitToDisplay ? (
                     <div className="absolute inset-0 pointer-events-none z-40 flex items-center justify-center">
                       <div className="w-[86%] h-[90%] sm:w-[88%] sm:h-[93%] md:w-[90%] md:h-[96%]">
-                        <ProgressiveImage
-                          src={portraitToDisplay}
-                          placeholderSrc={portraitLowToDisplay}
-                          alt="Character portrait"
-                          className="w-full h-full"
-                          imageClassName="object-contain drop-shadow-2xl transition-transform duration-200 ease-out"
-                          imageStyle={{
-                            transform: `translate(${portraitMassOffset.x}%, ${portraitMassOffset.y}%)`
-                          }}
-                          loading="eager"
-                          fetchPriority="high"
-                        />
+                        {hasCustomPortraitUpload ? (
+                          <img
+                            src={portraitToDisplay}
+                            alt="Character portrait"
+                            className="w-full h-full object-contain drop-shadow-2xl transition-transform duration-200 ease-out"
+                            style={{
+                              transform: `translate(${portraitMassOffset.x}%, ${portraitMassOffset.y}%)`
+                            }}
+                            loading="eager"
+                            decoding="async"
+                            fetchPriority="high"
+                          />
+                        ) : (
+                          <ProgressiveImage
+                            src={portraitToDisplay}
+                            placeholderSrc={portraitLowToDisplay}
+                            alt="Character portrait"
+                            className="w-full h-full"
+                            imageClassName="object-contain drop-shadow-2xl transition-transform duration-200 ease-out"
+                            imageStyle={{
+                              transform: `translate(${portraitMassOffset.x}%, ${portraitMassOffset.y}%)`
+                            }}
+                            loading="eager"
+                            fetchPriority="high"
+                          />
+                        )}
                       </div>
                     </div>
                   ) : (
@@ -1433,7 +1447,7 @@ export default function App() {
                       style={frameMaskHasOpening ? frameInnerOpeningMaskStyle : frameInnerFallbackStyle}
                     >
                       <ImagePlus size={48} className="mb-4 opacity-80" />
-                      <span className="text-sm font-bold text-center px-4 uppercase tracking-widest text-stone-700">
+                      <span className="text-xs font-bold text-center px-4 uppercase tracking-widest text-stone-700">
                         {t.uploadPortrait}
                       </span>
                       <span className="text-[10px] uppercase text-stone-600 mt-1 tracking-wider">
