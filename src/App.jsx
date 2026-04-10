@@ -914,11 +914,8 @@ export default function App() {
 
   const defaultPortraitAsset = DEFAULT_PORTRAITS[playbook.name] || null;
   const defaultPortrait = defaultPortraitAsset?.url || null;
-  const defaultPortraitLow = defaultPortraitAsset?.lowUrl || defaultPortrait;
   const portraitToDisplay =
     currentState.image || (currentState.useDefaultPortrait ? defaultPortrait : null);
-  const portraitLowToDisplay =
-    currentState.image || (currentState.useDefaultPortrait ? defaultPortraitLow : null);
   const hasCustomPortraitUpload = Boolean(currentState.image && !currentState.useDefaultPortrait);
 
   const activeBackground =
@@ -957,13 +954,12 @@ export default function App() {
     addPreload(frameSvg, "high");
     addPreload(activeBackground?.lowUrl, "high");
     addPreload(activeBackground?.url, "high");
-    addPreload(portraitLowToDisplay, "high");
     addPreload(portraitToDisplay, "high");
 
     return () => {
       preloadLinks.forEach((link) => link.remove());
     };
-  }, [activeBackground?.lowUrl, activeBackground?.url, portraitLowToDisplay, portraitToDisplay]);
+  }, [activeBackground?.lowUrl, activeBackground?.url, portraitToDisplay]);
 
   useEffect(() => {
     let canceled = false;
@@ -1148,24 +1144,181 @@ export default function App() {
       const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const data = imageData.data;
 
-      for (let i = 0; i < data.length; i += 4) {
-        const r = data[i];
-        const g = data[i + 1];
-        const b = data[i + 2];
-        const a = data[i + 3];
+      const width = canvas.width;
+      const height = canvas.height;
+      const total = width * height;
 
-        if (a < 8) continue;
+      const toOffset = (pixelIndex) => pixelIndex * 4;
+      const readRgb = (pixelIndex) => {
+        const o = toOffset(pixelIndex);
+        return [data[o], data[o + 1], data[o + 2], data[o + 3]];
+      };
+      const colorDistance = (aR, aG, aB, bR, bG, bB) =>
+        Math.hypot(aR - bR, aG - bG, aB - bB);
 
+      const borderPixels = [];
+      const addBorderPixel = (x, y) => {
+        borderPixels.push(y * width + x);
+      };
+
+      for (let x = 0; x < width; x += 1) {
+        addBorderPixel(x, 0);
+        addBorderPixel(x, height - 1);
+      }
+      for (let y = 1; y < height - 1; y += 1) {
+        addBorderPixel(0, y);
+        addBorderPixel(width - 1, y);
+      }
+
+      let sumR = 0;
+      let sumG = 0;
+      let sumB = 0;
+      let sumLight = 0;
+      let modelCount = 0;
+
+      borderPixels.forEach((pixelIndex) => {
+        const [r, g, b, a] = readRgb(pixelIndex);
+        if (a < 8) return;
+        sumR += r;
+        sumG += g;
+        sumB += b;
+        sumLight += (r + g + b) / 3;
+        modelCount += 1;
+      });
+
+      if (modelCount === 0) {
+        modelCount = 1;
+      }
+
+      const bgR = sumR / modelCount;
+      const bgG = sumG / modelCount;
+      const bgB = sumB / modelCount;
+      const bgLight = sumLight / modelCount;
+
+      let deviationSum = 0;
+      borderPixels.forEach((pixelIndex) => {
+        const [r, g, b, a] = readRgb(pixelIndex);
+        if (a < 8) return;
+        deviationSum += colorDistance(r, g, b, bgR, bgG, bgB);
+      });
+
+      const avgDeviation = deviationSum / modelCount;
+      const strictThreshold = Math.max(20, Math.min(62, 18 + avgDeviation * 1.6));
+      const softThreshold = strictThreshold + 16;
+      const localStepThreshold = Math.max(18, strictThreshold * 0.72);
+
+      const visited = new Uint8Array(total);
+      const queue = new Int32Array(total);
+      let qHead = 0;
+      let qTail = 0;
+
+      const enqueue = (pixelIndex) => {
+        if (visited[pixelIndex]) return;
+        visited[pixelIndex] = 1;
+        queue[qTail] = pixelIndex;
+        qTail += 1;
+      };
+
+      borderPixels.forEach((pixelIndex) => {
+        const [r, g, b, a] = readRgb(pixelIndex);
+        if (a < 8) {
+          enqueue(pixelIndex);
+          return;
+        }
+        const distToModel = colorDistance(r, g, b, bgR, bgG, bgB);
+        if (distToModel <= softThreshold) {
+          enqueue(pixelIndex);
+        }
+      });
+
+      if (qTail === 0) {
+        borderPixels.forEach((pixelIndex) => enqueue(pixelIndex));
+      }
+
+      const tryExpand = (nextX, nextY, parentIndex) => {
+        if (nextX < 0 || nextY < 0 || nextX >= width || nextY >= height) return;
+
+        const nextIndex = nextY * width + nextX;
+        if (visited[nextIndex]) return;
+
+        const [r, g, b, a] = readRgb(nextIndex);
+        if (a < 8) {
+          enqueue(nextIndex);
+          return;
+        }
+
+        const parentOffset = toOffset(parentIndex);
+        const parentR = data[parentOffset];
+        const parentG = data[parentOffset + 1];
+        const parentB = data[parentOffset + 2];
+
+        const distToModel = colorDistance(r, g, b, bgR, bgG, bgB);
+        const distToParent = colorDistance(r, g, b, parentR, parentG, parentB);
         const max = Math.max(r, g, b);
         const min = Math.min(r, g, b);
         const saturation = max === 0 ? 0 : (max - min) / max;
         const lightness = (r + g + b) / 3;
 
-        if ((lightness > 240 && saturation < 0.24) || (lightness > 228 && saturation < 0.14)) {
-          data[i + 3] = 0;
-        } else if ((lightness > 215 && saturation < 0.1) || (lightness > 200 && saturation < 0.07)) {
-          data[i + 3] = Math.floor(a * 0.45);
+        const isBackgroundLike =
+          distToModel <= strictThreshold ||
+          (distToModel <= softThreshold &&
+            distToParent <= localStepThreshold &&
+            (saturation < 0.34 || lightness >= bgLight - 24));
+
+        if (isBackgroundLike) {
+          enqueue(nextIndex);
         }
+      };
+
+      while (qHead < qTail) {
+        const currentIndex = queue[qHead++];
+        const x = currentIndex % width;
+        const y = (currentIndex - x) / width;
+
+        tryExpand(x + 1, y, currentIndex);
+        tryExpand(x - 1, y, currentIndex);
+        tryExpand(x, y + 1, currentIndex);
+        tryExpand(x, y - 1, currentIndex);
+      }
+
+      const hasBackgroundNeighbor = (pixelIndex) => {
+        const x = pixelIndex % width;
+        const y = (pixelIndex - x) / width;
+
+        for (let dy = -1; dy <= 1; dy += 1) {
+          for (let dx = -1; dx <= 1; dx += 1) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = x + dx;
+            const ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= width || ny >= height) continue;
+            if (visited[ny * width + nx]) return true;
+          }
+        }
+
+        return false;
+      };
+
+      for (let pixelIndex = 0; pixelIndex < total; pixelIndex += 1) {
+        const o = toOffset(pixelIndex);
+
+        if (visited[pixelIndex]) {
+          data[o + 3] = 0;
+          continue;
+        }
+
+        if (!hasBackgroundNeighbor(pixelIndex)) continue;
+
+        const r = data[o];
+        const g = data[o + 1];
+        const b = data[o + 2];
+        const a = data[o + 3];
+        const distToModel = colorDistance(r, g, b, bgR, bgG, bgB);
+
+        if (distToModel > softThreshold || a < 8) continue;
+
+        const edgeStrength = Math.max(0, (softThreshold - distToModel) / Math.max(1, softThreshold - strictThreshold));
+        const alphaScale = 1 - 0.4 * edgeStrength;
+        data[o + 3] = Math.max(0, Math.floor(a * alphaScale));
       }
 
       ctx.putImageData(imageData, 0, 0);
@@ -1413,32 +1566,17 @@ export default function App() {
                   {portraitToDisplay ? (
                     <div className="absolute inset-0 pointer-events-none z-40 flex items-center justify-center">
                       <div className="w-[86%] h-[90%] sm:w-[88%] sm:h-[93%] md:w-[90%] md:h-[96%]">
-                        {hasCustomPortraitUpload ? (
-                          <img
-                            src={portraitToDisplay}
-                            alt="Character portrait"
-                            className="w-full h-full object-contain drop-shadow-2xl transition-transform duration-200 ease-out"
-                            style={{
-                              transform: `translate(${portraitMassOffset.x}%, ${portraitMassOffset.y}%)`
-                            }}
-                            loading="eager"
-                            decoding="async"
-                            fetchPriority="high"
-                          />
-                        ) : (
-                          <ProgressiveImage
-                            src={portraitToDisplay}
-                            placeholderSrc={portraitLowToDisplay}
-                            alt="Character portrait"
-                            className="w-full h-full"
-                            imageClassName="object-contain drop-shadow-2xl transition-transform duration-200 ease-out"
-                            imageStyle={{
-                              transform: `translate(${portraitMassOffset.x}%, ${portraitMassOffset.y}%)`
-                            }}
-                            loading="eager"
-                            fetchPriority="high"
-                          />
-                        )}
+                        <img
+                          src={portraitToDisplay}
+                          alt="Character portrait"
+                          className="w-full h-full object-contain drop-shadow-2xl transition-transform duration-200 ease-out"
+                          style={{
+                            transform: `translate(${portraitMassOffset.x}%, ${portraitMassOffset.y}%)`
+                          }}
+                          loading="eager"
+                          decoding="async"
+                          fetchPriority="high"
+                        />
                       </div>
                     </div>
                   ) : (
@@ -1447,7 +1585,7 @@ export default function App() {
                       style={frameMaskHasOpening ? frameInnerOpeningMaskStyle : frameInnerFallbackStyle}
                     >
                       <ImagePlus size={48} className="mb-4 opacity-80" />
-                      <span className="text-xs font-bold text-center px-4 uppercase tracking-widest text-stone-700">
+                      <span className="text-[10px] font-bold text-center px-4 uppercase tracking-widest text-stone-700">
                         {t.uploadPortrait}
                       </span>
                       <span className="text-[10px] uppercase text-stone-600 mt-1 tracking-wider">
