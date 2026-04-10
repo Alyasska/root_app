@@ -33,6 +33,59 @@ const FEAT_RULES = {
   Принц: { mode: "fixed-plus-any", count: 2 }
 };
 
+function ProgressiveImage({
+  src,
+  placeholderSrc,
+  alt,
+  className = "",
+  imageClassName = "",
+  imageStyle,
+  loading = "lazy",
+  decoding = "async",
+  fetchPriority = "auto"
+}) {
+  const [isLoaded, setIsLoaded] = useState(false);
+
+  useEffect(() => {
+    setIsLoaded(false);
+  }, [src]);
+
+  if (!src && !placeholderSrc) return null;
+
+  return (
+    <div className={`relative w-full h-full ${className}`}>
+      {(placeholderSrc || src) && (
+        <img
+          src={placeholderSrc || src}
+          alt=""
+          aria-hidden="true"
+          className={`${imageClassName} absolute inset-0 w-full h-full transition-opacity duration-500 ease-out ${
+            isLoaded ? "opacity-0" : "opacity-100 blur-md scale-[1.04]"
+          }`}
+          style={imageStyle}
+          loading="eager"
+          decoding="async"
+        />
+      )}
+
+      {src && (
+        <img
+          src={src}
+          alt={alt}
+          className={`${imageClassName} absolute inset-0 w-full h-full transition-opacity duration-500 ease-out ${
+            isLoaded ? "opacity-100" : "opacity-0"
+          }`}
+          style={imageStyle}
+          loading={loading}
+          decoding={decoding}
+          fetchPriority={fetchPriority}
+          onLoad={() => setIsLoaded(true)}
+        />
+      )}
+    </div>
+  );
+}
+
 const uiText = {
   ru: {
     appTitle: "Буклеты",
@@ -441,15 +494,19 @@ const playbookPortraitAliases = {
   Скиталец: ["скиталец", "vagrant"]
 };
 
-const baseRootPortraitModules = import.meta.glob("../Base Root/*.{png,jpg,jpeg,webp}", {
+const optimizedPortraitSvgModules = import.meta.glob("../assets-optimized/portraits-svg/*.svg", {
   eager: true,
   import: "default"
 });
-const outcastPortraitModules = import.meta.glob("../Travelers & Outsiders/*.{png,jpg,jpeg,webp}", {
+const optimizedPortraitLowModules = import.meta.glob("../assets-optimized/portraits-low/*.webp", {
   eager: true,
   import: "default"
 });
-const backgroundModules = import.meta.glob("../Root BG/*.{png,jpg,jpeg,webp}", {
+const optimizedBackgroundModules = import.meta.glob("../assets-optimized/backgrounds/*.webp", {
+  eager: true,
+  import: "default"
+});
+const optimizedBackgroundLowModules = import.meta.glob("../assets-optimized/backgrounds-low/*.webp", {
   eager: true,
   import: "default"
 });
@@ -549,14 +606,22 @@ const getBaseFileName = (path) => {
   return parts[parts.length - 1] || "";
 };
 
+const buildAssetMapByBaseName = (modules) =>
+  new Map(
+    Object.entries(modules).map(([path, url]) => [getBaseFileName(path).replace(/\.[^/.]+$/, ""), url])
+  );
+
+const backgroundLowByBaseName = buildAssetMapByBaseName(optimizedBackgroundLowModules);
+
 const buildSortedBackgrounds = () =>
-  Object.entries(backgroundModules)
+  Object.entries(optimizedBackgroundModules)
     .map(([path, url]) => {
       const baseName = getBaseFileName(path).replace(/\.[^/.]+$/, "");
       const numeric = Number(baseName);
       return {
         key: path,
         url,
+        lowUrl: backgroundLowByBaseName.get(baseName) || url,
         sortA: Number.isFinite(numeric) ? 0 : 1,
         sortB: Number.isFinite(numeric) ? numeric : Number.MAX_SAFE_INTEGER,
         sortC: baseName
@@ -564,16 +629,17 @@ const buildSortedBackgrounds = () =>
     })
     .sort((a, b) => a.sortA - b.sortA || a.sortB - b.sortB || a.sortC.localeCompare(b.sortC));
 
-const portraitAssetList = [...Object.entries(baseRootPortraitModules), ...Object.entries(outcastPortraitModules)].map(
-  ([path, url]) => {
-    const baseName = getBaseFileName(path).replace(/\.[^/.]+$/, "");
-    return {
-      path,
-      url,
-      normalizedName: normalizeToken(baseName)
-    };
-  }
-);
+const portraitLowByBaseName = buildAssetMapByBaseName(optimizedPortraitLowModules);
+
+const portraitAssetList = Object.entries(optimizedPortraitSvgModules).map(([path, url]) => {
+  const baseName = getBaseFileName(path).replace(/\.[^/.]+$/, "");
+  return {
+    path,
+    url,
+    lowUrl: portraitLowByBaseName.get(baseName) || url,
+    normalizedName: normalizeToken(baseName)
+  };
+});
 
 const findPortraitForPlaybook = (playbookName) => {
   const aliases = unique([
@@ -585,10 +651,10 @@ const findPortraitForPlaybook = (playbookName) => {
   for (const alias of aliases) {
     if (!alias) continue;
     const exact = portraitAssetList.find((asset) => asset.normalizedName === alias);
-    if (exact) return exact.url;
+    if (exact) return exact;
 
     const partial = portraitAssetList.find((asset) => asset.normalizedName.includes(alias));
-    if (partial) return partial.url;
+    if (partial) return partial;
   }
 
   return null;
@@ -846,9 +912,13 @@ export default function App() {
   const optionalFeatsCount = currentState.feats.filter((feat) => !fixedFeats.includes(feat)).length;
   const hasReachedFeatLimit = optionalFeatsCount >= featRule.count;
 
-  const defaultPortrait = DEFAULT_PORTRAITS[playbook.name] || null;
+  const defaultPortraitAsset = DEFAULT_PORTRAITS[playbook.name] || null;
+  const defaultPortrait = defaultPortraitAsset?.url || null;
+  const defaultPortraitLow = defaultPortraitAsset?.lowUrl || defaultPortrait;
   const portraitToDisplay =
     currentState.image || (currentState.useDefaultPortrait ? defaultPortrait : null);
+  const portraitLowToDisplay =
+    currentState.image || (currentState.useDefaultPortrait ? defaultPortraitLow : null);
 
   const activeBackground =
     selectedBgIndex >= 0 && selectedBgIndex < totalBackgrounds
@@ -868,6 +938,71 @@ export default function App() {
       isActive = false;
     };
   }, [portraitToDisplay]);
+
+  useEffect(() => {
+    const preloadLinks = [];
+
+    const addPreload = (href, priority = "high") => {
+      if (!href) return;
+      const link = document.createElement("link");
+      link.rel = "preload";
+      link.as = "image";
+      link.href = href;
+      link.setAttribute("fetchpriority", priority);
+      document.head.appendChild(link);
+      preloadLinks.push(link);
+    };
+
+    addPreload(frameSvg, "high");
+    addPreload(activeBackground?.lowUrl, "high");
+    addPreload(activeBackground?.url, "high");
+    addPreload(portraitLowToDisplay, "high");
+    addPreload(portraitToDisplay, "high");
+
+    return () => {
+      preloadLinks.forEach((link) => link.remove());
+    };
+  }, [activeBackground?.lowUrl, activeBackground?.url, portraitLowToDisplay, portraitToDisplay]);
+
+  useEffect(() => {
+    let canceled = false;
+
+    const warmUrls = Array.from(
+      new Set([
+        ...ROOT_BACKGROUNDS.flatMap((bg) => [bg.lowUrl, bg.url]),
+        ...Object.values(DEFAULT_PORTRAITS).flatMap((asset) =>
+          asset ? [asset.lowUrl || asset.url, asset.url] : []
+        )
+      ])
+    ).filter(Boolean);
+
+    const warmResources = () => {
+      if (canceled) return;
+
+      warmUrls.forEach((url) => {
+        const image = new Image();
+        image.decoding = "async";
+        if ("fetchPriority" in image) {
+          image.fetchPriority = "low";
+        }
+        image.src = url;
+      });
+    };
+
+    if ("requestIdleCallback" in window) {
+      const idleId = window.requestIdleCallback(warmResources, { timeout: 2200 });
+      return () => {
+        canceled = true;
+        window.cancelIdleCallback(idleId);
+      };
+    }
+
+    const timeoutId = window.setTimeout(warmResources, 1200);
+    return () => {
+      canceled = true;
+      window.clearTimeout(timeoutId);
+    };
+  }, []);
 
   const frameInnerOpeningMaskStyle = useMemo(() => {
     if (!frameInnerMaskUrl || !frameMaskHasOpening) {
@@ -1251,12 +1386,14 @@ export default function App() {
                     }}
                   >
                     {activeBackground && (
-                      <img
+                      <ProgressiveImage
                         src={activeBackground.url}
+                        placeholderSrc={activeBackground.lowUrl}
                         alt="Portrait background"
-                        className="w-full h-full object-cover"
-                        loading="lazy"
-                        decoding="async"
+                        className="w-full h-full"
+                        imageClassName="object-cover"
+                        loading="eager"
+                        fetchPriority="high"
                       />
                     )}
                   </div>
@@ -1265,23 +1402,26 @@ export default function App() {
                     src={frameSvg}
                     alt="Portrait frame"
                     className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none z-20 transform-gpu scale-[1.16] sm:scale-[1.24] md:scale-[1.32]"
-                    loading="lazy"
+                    loading="eager"
                     decoding="async"
+                    fetchPriority="high"
                   />
 
                   {portraitToDisplay ? (
                     <div className="absolute inset-0 pointer-events-none z-40 flex items-center justify-center">
                       <div className="w-[86%] h-[90%] sm:w-[88%] sm:h-[93%] md:w-[90%] md:h-[96%]">
-                      <img
-                        src={portraitToDisplay}
-                        alt="Портрет персонажа"
-                        className="w-full h-full object-contain drop-shadow-2xl transition-transform duration-200 ease-out"
-                        style={{
-                          transform: `translate(${portraitMassOffset.x}%, ${portraitMassOffset.y}%)`
-                        }}
-                        loading="lazy"
-                        decoding="async"
-                      />
+                        <ProgressiveImage
+                          src={portraitToDisplay}
+                          placeholderSrc={portraitLowToDisplay}
+                          alt="Character portrait"
+                          className="w-full h-full"
+                          imageClassName="object-contain drop-shadow-2xl transition-transform duration-200 ease-out"
+                          imageStyle={{
+                            transform: `translate(${portraitMassOffset.x}%, ${portraitMassOffset.y}%)`
+                          }}
+                          loading="eager"
+                          fetchPriority="high"
+                        />
                       </div>
                     </div>
                   ) : (
