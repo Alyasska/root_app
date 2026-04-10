@@ -553,7 +553,7 @@ export const playbooks = [
     startingFeats: ["Подделка"],
     startingSkills: ["Парирование", "Импровизированное оружие", "Нападение на группу", "Обезоруживание"],
     movesCheck: 3,
-    startingMoves: ["Оратор"],
+    startingMoves: [],
     moves: [
       {
         name: "Безупречная репутация",
@@ -706,7 +706,7 @@ export const playbooks = [
     startingFeats: ["Незаметность", "Подкрадывание"],
     startingSkills: ["Жестокий удар", "Пробитие", "Нападение на группу", "Обезоруживание"],
     movesCheck: 3,
-    startingMoves: ["Яды и противоядия"],
+    startingMoves: [],
     moves: [
       {
         name: "Грязный боец",

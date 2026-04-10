@@ -17,10 +17,15 @@ import {
 } from "lucide-react";
 import { allFeats, allSkills, playbooks } from "./data/playbooks";
 
-const STORAGE_KEY = "root-playbook-state-v3";
+const STORAGE_KEY = "root-playbook-state-v4";
 const LANGUAGE_KEY = "root-playbook-lang-v1";
-const MAX_OPTIONAL_FEATS = 1;
 const statsOrder = ["Шарм", "Хитрость", "Сноровка", "Удача", "Мощь"];
+
+const FEAT_RULES = {
+  Вор: { mode: "any", count: 4 },
+  Судья: { mode: "any", count: 1 },
+  Принц: { mode: "fixed-plus-any", count: 2 }
+};
 
 const uiText = {
   ru: {
@@ -31,17 +36,18 @@ const uiText = {
     uploadPortrait: "Загрузить портрет",
     portraitHint: "(Рекомендуется без фона)",
     removePortrait: "Удалить портрет",
-    removeBg: "Убрать фон",
+    removeBg: "Background Remover",
     removeBgBusy: "Убираю фон...",
     chooseNature: "Выберите свою натуру",
     selectedNature: "Выбрано",
     stats: "Характеристики",
     statsHint: "Добавьте +1 к характеристике на выбор (макс. +2)",
     feats: "Плутовские приёмы",
-    featsHint: "Начинает с отмеченными приёмами",
-    featsLimit: `Можно выбрать дополнительно: ${MAX_OPTIONAL_FEATS}`,
+    featsHintFixed: "Только отмеченные в бланке (без доп. выбора)",
+    featsHintAny: (count) => `Свободный выбор любых ${count}`,
+    featsHintFixedPlusAny: (count) => `Отмеченные + выберите ещё ${count}`,
     skills: "Оружейные навыки",
-    skillsHint: "Выберите один выделенный навык для старта",
+    skillsHint: "Выберите 1 навык из выделенных",
     moves: "Ваши ходы",
     starting: "СТАРТОВЫЙ",
     language: "Язык"
@@ -54,17 +60,18 @@ const uiText = {
     uploadPortrait: "Upload portrait",
     portraitHint: "(Transparent background is recommended)",
     removePortrait: "Delete portrait",
-    removeBg: "Background remover",
+    removeBg: "Background Remover",
     removeBgBusy: "Removing background...",
     chooseNature: "Choose your nature",
     selectedNature: "Selected",
     stats: "Stats",
     statsHint: "Add +1 to one stat (max +2)",
     feats: "Roguish feats",
-    featsHint: "Starts with marked feats",
-    featsLimit: `Extra picks available: ${MAX_OPTIONAL_FEATS}`,
+    featsHintFixed: "Fixed by the playbook (no extra picks)",
+    featsHintAny: (count) => `Free pick: any ${count}`,
+    featsHintFixedPlusAny: (count) => `Fixed feats + pick ${count} more`,
     skills: "Weapon skills",
-    skillsHint: "Choose one highlighted starting skill",
+    skillsHint: "Choose 1 highlighted skill",
     moves: "Your moves",
     starting: "STARTING",
     language: "Language"
@@ -96,7 +103,7 @@ const playbookNameEn = {
   Еретик: "Heretic",
   Пират: "Pirate",
   Принц: "Prince",
-  Рассказчик: "Storyteller",
+  Рассказчик: "Raconteur",
   Разбойник: "Raider",
   Искатель: "Seeker",
   Авантюрист: "Adventurer",
@@ -104,20 +111,86 @@ const playbookNameEn = {
   Налётчик: "Harrier",
   Следопыт: "Ranger",
   Ронин: "Ronin",
-  Поджигатель: "Arsonist",
+  Поджигатель: "Scoundrel",
   Вор: "Thief",
   Ремесленник: "Tinker",
-  Скиталец: "Wanderer"
+  Скиталец: "Vagrant"
 };
 
-const getDefaultState = (playbook) => ({
-  bonusStat: null,
-  nature: null,
-  feats: [...playbook.startingFeats],
-  skills: [],
-  moves: [...playbook.startingMoves],
-  image: null
-});
+const playbookDescriptionEn = {
+  Поборник: "You are a rising hero and standard-bearer of lost causes, sworn to protect the weak.",
+  Летописец: "You preserve forbidden knowledge and hidden truths others would rather erase.",
+  Изгнанник: "Once a respected insider, you now define yourself by what you do after exile.",
+  Посланник: "You are a professional envoy, negotiating conflicts while staying plausibly deniable.",
+  Еретик: "You fight for beliefs most factions reject, convinced your cause serves a greater good.",
+  Пират: "A free river captain, you live by mobility, trade, and daring choices on open waters.",
+  Принц: "Born into vagabond legacy, you carry family expectation and inherited reputation.",
+  Рассказчик: "You shape public truth through stories, performances, and influence across clearings.",
+  Разбойник: "A dangerous bruiser-for-hire, you solve problems with force and battlefield pressure.",
+  Искатель: "You chase ruins, secrets, and wonders hidden in the oldest places of the Woodland.",
+  Авантюрист: "A diplomatic wanderer who builds alliances and changes power through trust.",
+  Судья: "A stubborn enforcer-protector who steps into conflict and decides where justice falls.",
+  Налётчик: "A fast operator and courier, always first through risk and hard routes.",
+  Следопыт: "A wilderness specialist who prefers the wild edge over crowded settlements.",
+  Ронин: "A masterless veteran seeking freedom, discipline, and purpose in a new land.",
+  Поджигатель: "A chaotic risk-taker who turns danger into leverage, mayhem, and opportunity.",
+  Вор: "A precise infiltrator who steals what others hide and disappears before the alarm.",
+  Ремесленник: "An inventive engineer whose tools, plans, and prototypes change what is possible.",
+  Скиталец: "A silver-tongued survivor who talks through danger and manipulates tension between enemies."
+};
+
+const unique = (arr) => Array.from(new Set(arr));
+
+const getFeatRule = (playbookName) => FEAT_RULES[playbookName] || { mode: "fixed", count: 0 };
+
+const getFixedFeats = (playbook, featRule) =>
+  featRule.mode === "any" ? [] : [...playbook.startingFeats];
+
+const clampFeats = (feats, fixedFeats, featRule) => {
+  const valid = unique((feats || []).filter((feat) => allFeats.includes(feat)));
+
+  if (featRule.mode === "fixed") {
+    return [...fixedFeats];
+  }
+
+  if (featRule.mode === "any") {
+    return valid.slice(0, featRule.count);
+  }
+
+  const optional = valid.filter((feat) => !fixedFeats.includes(feat)).slice(0, featRule.count);
+  return unique([...fixedFeats, ...optional]);
+};
+
+const sanitizeCharacter = (playbook, rawState) => {
+  const featRule = getFeatRule(playbook.name);
+  const fixedFeats = getFixedFeats(playbook, featRule);
+
+  const next = rawState && typeof rawState === "object" ? rawState : {};
+
+  const bonusStat = statsOrder.includes(next.bonusStat) ? next.bonusStat : null;
+  const nature = playbook.natures.some((n) => n.name === next.nature) ? next.nature : null;
+  const feats = clampFeats(next.feats, fixedFeats, featRule);
+
+  const skills = unique(
+    (Array.isArray(next.skills) ? next.skills : []).filter((skill) =>
+      playbook.startingSkills.includes(skill)
+    )
+  ).slice(0, 1);
+
+  const mandatoryMoves = [...playbook.startingMoves];
+  const optionalMoves = unique(
+    (Array.isArray(next.moves) ? next.moves : []).filter((move) =>
+      playbook.moves.some((m) => m.name === move) && !mandatoryMoves.includes(move)
+    )
+  ).slice(0, playbook.movesCheck);
+
+  const moves = unique([...mandatoryMoves, ...optionalMoves]);
+  const image = typeof next.image === "string" ? next.image : null;
+
+  return { bonusStat, nature, feats, skills, moves, image };
+};
+
+const getDefaultState = (playbook) => sanitizeCharacter(playbook, {});
 
 export default function App() {
   const [selectedIdx, setSelectedIdx] = useState(0);
@@ -168,16 +241,23 @@ export default function App() {
   }, [coreStartIndex, t.editionCore, t.editionOutcasts]);
 
   const playbook = playbooks[selectedIdx];
-  const currentState = characterState[playbook.name] || getDefaultState(playbook);
-  const optionalFeatsSelected = currentState.feats.filter((feat) => !playbook.startingFeats.includes(feat));
-  const hasReachedFeatLimit = optionalFeatsSelected.length >= MAX_OPTIONAL_FEATS;
+  const currentState = sanitizeCharacter(
+    playbook,
+    characterState[playbook.name] || getDefaultState(playbook)
+  );
+
+  const featRule = getFeatRule(playbook.name);
+  const fixedFeats = getFixedFeats(playbook, featRule);
+  const optionalFeatsCount = currentState.feats.filter((feat) => !fixedFeats.includes(feat)).length;
+  const hasReachedFeatLimit = optionalFeatsCount >= featRule.count;
 
   const updateState = (updates) => {
     setCharacterState((prev) => {
-      const base = prev[playbook.name] || getDefaultState(playbook);
+      const base = sanitizeCharacter(playbook, prev[playbook.name] || getDefaultState(playbook));
+      const merged = sanitizeCharacter(playbook, { ...base, ...updates });
       return {
         ...prev,
-        [playbook.name]: { ...base, ...updates }
+        [playbook.name]: merged
       };
     });
   };
@@ -185,6 +265,17 @@ export default function App() {
   const displayPlaybookName = (name) => {
     if (language === "en") return playbookNameEn[name] || name;
     return name;
+  };
+
+  const displayDescription = (pb) => {
+    if (language === "en") return playbookDescriptionEn[pb.name] || pb.description;
+    return pb.description;
+  };
+
+  const getFeatHint = () => {
+    if (featRule.mode === "any") return t.featsHintAny(featRule.count);
+    if (featRule.mode === "fixed-plus-any") return t.featsHintFixedPlusAny(featRule.count);
+    return t.featsHintFixed;
   };
 
   const handleImageUpload = (e) => {
@@ -228,7 +319,7 @@ export default function App() {
         const b = data[i + 2];
         const a = data[i + 3];
 
-        if (a < 10) continue;
+        if (a < 8) continue;
 
         const max = Math.max(r, g, b);
         const min = Math.min(r, g, b);
@@ -245,7 +336,7 @@ export default function App() {
       ctx.putImageData(imageData, 0, 0);
       updateState({ image: canvas.toDataURL("image/png") });
     } catch {
-      // Keep original image unchanged if processing fails.
+      // Ignore background-removal failures and keep original image.
     } finally {
       setIsRemovingBg(false);
     }
@@ -264,17 +355,19 @@ export default function App() {
   };
 
   const handleFeatToggle = (feat) => {
-    const isStarting = playbook.startingFeats.includes(feat);
     const isChecked = currentState.feats.includes(feat);
+    const isFixed = fixedFeats.includes(feat);
 
-    if (isStarting && isChecked) return;
+    if (featRule.mode === "fixed") return;
+
+    if (featRule.mode === "fixed-plus-any" && isFixed) return;
 
     if (isChecked) {
       updateState({ feats: currentState.feats.filter((item) => item !== feat) });
       return;
     }
 
-    if (!isStarting && hasReachedFeatLimit) return;
+    if (hasReachedFeatLimit) return;
 
     updateState({ feats: [...currentState.feats, feat] });
   };
@@ -307,15 +400,12 @@ export default function App() {
 
   const getMovesHeaderText = () => {
     if (playbook.startingMoves.length > 0) {
-      const startingStr = playbook.startingMoves
-        .map((name) => (language === "en" ? name : name))
-        .join(" / ")
-        .toUpperCase();
+      const startingStr = playbook.startingMoves.join(" + ");
       return `${startingStr} + ${playbook.movesCheck}`;
     }
     return language === "en"
-      ? `Choose ${playbook.movesCheck} to start`
-      : `ВЫБЕРИТЕ ${playbook.movesCheck} ДЛЯ СТАРТА`;
+      ? `Choose any ${playbook.movesCheck}`
+      : `Свободный выбор: ${playbook.movesCheck}`;
   };
 
   const selectedOptionalMovesCount = currentState.moves.filter(
@@ -471,7 +561,7 @@ export default function App() {
 
               <div className="w-full lg:w-2/3 flex flex-col gap-6 min-w-0">
                 <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-stone-300">
-                  <p className="text-lg md:text-xl text-stone-900 leading-8">{playbook.description}</p>
+                  <p className="text-lg md:text-xl text-stone-900 leading-8">{displayDescription(playbook)}</p>
                 </div>
 
                 <div className="flex-1 flex flex-col min-w-0">
@@ -576,23 +666,29 @@ export default function App() {
                   <Shield className="text-stone-700 flex-shrink-0" size={20} /> {t.feats}
                 </h3>
                 <div className="bg-white rounded-xl border border-stone-300 p-4 shadow-sm flex-1">
-                  <p className="text-xs text-stone-700 uppercase tracking-wider font-semibold break-words">
-                    {t.featsHint}
+                  <p className="text-xs text-stone-700 mb-4 uppercase tracking-wider font-semibold break-words">
+                    {getFeatHint()}
                   </p>
-                  <p className="mt-1 mb-4 text-xs text-amber-700 font-semibold">{t.featsLimit}</p>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     {allFeats.map((feat) => {
-                      const isStarting = playbook.startingFeats.includes(feat);
+                      const isFixed = fixedFeats.includes(feat);
                       const isChecked = currentState.feats.includes(feat);
-                      const isDisabled =
-                        (isStarting && isChecked) || (!isChecked && !isStarting && hasReachedFeatLimit);
+                      let isDisabled = false;
+
+                      if (featRule.mode === "fixed") {
+                        isDisabled = true;
+                      } else if (featRule.mode === "any") {
+                        isDisabled = !isChecked && hasReachedFeatLimit;
+                      } else {
+                        isDisabled = (isFixed && isChecked) || (!isChecked && !isFixed && hasReachedFeatLimit);
+                      }
 
                       return (
                         <label
                           key={feat}
                           className={`flex items-center gap-2 w-full ${
                             isDisabled ? "cursor-not-allowed opacity-60" : "cursor-pointer group"
-                          } ${isStarting ? "font-bold text-stone-900" : "text-stone-800"}`}
+                          } ${isFixed ? "font-bold text-stone-900" : "text-stone-800"}`}
                         >
                           <button
                             className="focus:outline-none flex-shrink-0"
