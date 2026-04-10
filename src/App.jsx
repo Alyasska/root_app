@@ -13,12 +13,16 @@ import {
   ImagePlus,
   Trash2,
   Languages,
-  Sparkles
+  Sparkles,
+  ChevronLeft,
+  ChevronRight,
+  RotateCcw
 } from "lucide-react";
 import { allFeats, allSkills, playbooks } from "./data/playbooks";
 
-const STORAGE_KEY = "root-playbook-state-v4";
+const STORAGE_KEY = "root-playbook-state-v5";
 const LANGUAGE_KEY = "root-playbook-lang-v1";
+const BG_STORAGE_KEY = "root-bg-index-v1";
 const statsOrder = ["Шарм", "Хитрость", "Сноровка", "Удача", "Мощь"];
 
 const FEAT_RULES = {
@@ -35,9 +39,15 @@ const uiText = {
     editionCore: "Root RPG: Базовая книга",
     uploadPortrait: "Загрузить портрет",
     portraitHint: "(Рекомендуется без фона)",
-    removePortrait: "Удалить портрет",
+    restoreDefaultPortrait: "Вставить дефолтный портрет",
+    removePortrait: "Убрать портрет",
     removeBg: "Background Remover",
     removeBgBusy: "Убираю фон...",
+    bgPrev: "Пред. фон",
+    bgNext: "След. фон",
+    bgClear: "Убрать фон",
+    bgNoSelection: "Фон: выключен",
+    bgSelected: (idx, total) => `Фон: ${idx + 1}/${total}`,
     chooseNature: "Выберите свою натуру",
     selectedNature: "Выбрано",
     stats: "Характеристики",
@@ -59,9 +69,15 @@ const uiText = {
     editionCore: "Root RPG: Core Book",
     uploadPortrait: "Upload portrait",
     portraitHint: "(Transparent background is recommended)",
-    removePortrait: "Delete portrait",
+    restoreDefaultPortrait: "Insert default portrait",
+    removePortrait: "Remove portrait",
     removeBg: "Background Remover",
     removeBgBusy: "Removing background...",
+    bgPrev: "Prev bg",
+    bgNext: "Next bg",
+    bgClear: "Clear bg",
+    bgNoSelection: "Background: off",
+    bgSelected: (idx, total) => `Background: ${idx + 1}/${total}`,
     chooseNature: "Choose your nature",
     selectedNature: "Selected",
     stats: "Stats",
@@ -139,7 +155,106 @@ const playbookDescriptionEn = {
   Скиталец: "A silver-tongued survivor who talks through danger and manipulates tension between enemies."
 };
 
+const playbookPortraitAliases = {
+  Поборник: ["поборник", "champion"],
+  Летописец: ["летописец", "хроник", "chronicler"],
+  Изгнанник: ["изгнанник", "exile"],
+  Посланник: ["посланник", "envoy"],
+  Еретик: ["еретик", "heretic"],
+  Пират: ["пират", "pirate"],
+  Принц: ["принц", "князь", "prince"],
+  Рассказчик: ["рассказчик", "raconteur"],
+  Разбойник: ["разбойник", "грабитель", "raider"],
+  Искатель: ["искатель", "seeker"],
+  Авантюрист: ["авантюрист", "adventurer"],
+  Судья: ["судья", "arbiter"],
+  Налётчик: ["налетчик", "налётчик", "harrier"],
+  Следопыт: ["следопыт", "ranger"],
+  Ронин: ["ронин", "ronin"],
+  Поджигатель: ["поджигатель", "scoundrel"],
+  Вор: ["вор", "thief"],
+  Ремесленник: ["ремесленник", "tinker"],
+  Скиталец: ["скиталец", "vagrant"]
+};
+
+const corePortraitModules = import.meta.glob("../Core Book/*.{png,jpg,jpeg,webp}", {
+  eager: true,
+  import: "default"
+});
+const outcastPortraitModules = import.meta.glob("../Travelers & Outsiders/*.{png,jpg,jpeg,webp}", {
+  eager: true,
+  import: "default"
+});
+const backgroundModules = import.meta.glob("../Root BG/*.{png,jpg,jpeg,webp}", {
+  eager: true,
+  import: "default"
+});
+
 const unique = (arr) => Array.from(new Set(arr));
+
+const normalizeToken = (value) =>
+  String(value || "")
+    .toLowerCase()
+    .replace(/\.[^/.]+$/, "")
+    .replace(/^the\s+/, "")
+    .replace(/[^a-zа-яё0-9]+/g, " ")
+    .trim();
+
+const getBaseFileName = (path) => {
+  const parts = path.replace(/\\/g, "/").split("/");
+  return parts[parts.length - 1] || "";
+};
+
+const buildSortedBackgrounds = () =>
+  Object.entries(backgroundModules)
+    .map(([path, url]) => {
+      const baseName = getBaseFileName(path).replace(/\.[^/.]+$/, "");
+      const numeric = Number(baseName);
+      return {
+        key: path,
+        url,
+        sortA: Number.isFinite(numeric) ? 0 : 1,
+        sortB: Number.isFinite(numeric) ? numeric : Number.MAX_SAFE_INTEGER,
+        sortC: baseName
+      };
+    })
+    .sort((a, b) => a.sortA - b.sortA || a.sortB - b.sortB || a.sortC.localeCompare(b.sortC));
+
+const portraitAssetList = [...Object.entries(corePortraitModules), ...Object.entries(outcastPortraitModules)].map(
+  ([path, url]) => {
+    const baseName = getBaseFileName(path).replace(/\.[^/.]+$/, "");
+    return {
+      path,
+      url,
+      normalizedName: normalizeToken(baseName)
+    };
+  }
+);
+
+const findPortraitForPlaybook = (playbookName) => {
+  const aliases = unique([
+    playbookName,
+    playbookNameEn[playbookName],
+    ...(playbookPortraitAliases[playbookName] || [])
+  ]).map(normalizeToken);
+
+  for (const alias of aliases) {
+    if (!alias) continue;
+    const exact = portraitAssetList.find((asset) => asset.normalizedName === alias);
+    if (exact) return exact.url;
+
+    const partial = portraitAssetList.find((asset) => asset.normalizedName.includes(alias));
+    if (partial) return partial.url;
+  }
+
+  return null;
+};
+
+const DEFAULT_PORTRAITS = Object.fromEntries(
+  playbooks.map((pb) => [pb.name, findPortraitForPlaybook(pb.name)])
+);
+
+const ROOT_BACKGROUNDS = buildSortedBackgrounds();
 
 const getFeatRule = (playbookName) => FEAT_RULES[playbookName] || { mode: "fixed", count: 0 };
 
@@ -164,7 +279,6 @@ const clampFeats = (feats, fixedFeats, featRule) => {
 const sanitizeCharacter = (playbook, rawState) => {
   const featRule = getFeatRule(playbook.name);
   const fixedFeats = getFixedFeats(playbook, featRule);
-
   const next = rawState && typeof rawState === "object" ? rawState : {};
 
   const bonusStat = statsOrder.includes(next.bonusStat) ? next.bonusStat : null;
@@ -186,37 +300,72 @@ const sanitizeCharacter = (playbook, rawState) => {
 
   const moves = unique([...mandatoryMoves, ...optionalMoves]);
   const image = typeof next.image === "string" ? next.image : null;
+  const useDefaultPortrait =
+    typeof next.useDefaultPortrait === "boolean" ? next.useDefaultPortrait : true;
 
-  return { bonusStat, nature, feats, skills, moves, image };
+  return { bonusStat, nature, feats, skills, moves, image, useDefaultPortrait };
+};
+
+const sanitizePersistedState = (rawState) => {
+  const source = rawState && typeof rawState === "object" ? rawState : {};
+  const output = {};
+
+  for (const playbook of playbooks) {
+    const sanitized = sanitizeCharacter(playbook, source[playbook.name]);
+    output[playbook.name] = {
+      ...sanitized,
+      image: null
+    };
+  }
+
+  return output;
 };
 
 const getDefaultState = (playbook) => sanitizeCharacter(playbook, {});
+
+const parseBgIndex = (value) => {
+  const index = Number(value);
+  return Number.isInteger(index) ? index : -1;
+};
 
 export default function App() {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [language, setLanguage] = useState(() => localStorage.getItem(LANGUAGE_KEY) || "ru");
   const [isRemovingBg, setIsRemovingBg] = useState(false);
+  const [selectedBgIndex, setSelectedBgIndex] = useState(() =>
+    parseBgIndex(localStorage.getItem(BG_STORAGE_KEY))
+  );
 
   const [characterState, setCharacterState] = useState(() => {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      return saved ? JSON.parse(saved) : {};
+      return saved ? sanitizePersistedState(JSON.parse(saved)) : {};
     } catch {
       return {};
     }
   });
 
+  const persistedCharacterState = useMemo(
+    () => sanitizePersistedState(characterState),
+    [characterState]
+  );
+
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(characterState));
-  }, [characterState]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(persistedCharacterState));
+  }, [persistedCharacterState]);
 
   useEffect(() => {
     localStorage.setItem(LANGUAGE_KEY, language);
   }, [language]);
 
+  useEffect(() => {
+    localStorage.setItem(BG_STORAGE_KEY, String(selectedBgIndex));
+  }, [selectedBgIndex]);
+
   const t = uiText[language];
   const coreStartIndex = playbooks.findIndex((pb) => pb.name === "Авантюрист");
+  const totalBackgrounds = ROOT_BACKGROUNDS.length;
 
   const groupedPlaybooks = useMemo(() => {
     if (coreStartIndex <= 0) {
@@ -251,6 +400,30 @@ export default function App() {
   const optionalFeatsCount = currentState.feats.filter((feat) => !fixedFeats.includes(feat)).length;
   const hasReachedFeatLimit = optionalFeatsCount >= featRule.count;
 
+  const defaultPortrait = DEFAULT_PORTRAITS[playbook.name] || null;
+  const portraitToDisplay =
+    currentState.image || (currentState.useDefaultPortrait ? defaultPortrait : null);
+
+  const activeBackground =
+    selectedBgIndex >= 0 && selectedBgIndex < totalBackgrounds
+      ? ROOT_BACKGROUNDS[selectedBgIndex]
+      : null;
+
+  const mainBackgroundStyle = useMemo(() => {
+    if (activeBackground) {
+      return {
+        backgroundImage: `url(${activeBackground.url})`,
+        backgroundSize: "cover",
+        backgroundPosition: "center",
+        backgroundAttachment: "fixed"
+      };
+    }
+
+    return {
+      backgroundImage: "url('https://www.transparenttextures.com/patterns/aged-paper.png')"
+    };
+  }, [activeBackground]);
+
   const updateState = (updates) => {
     setCharacterState((prev) => {
       const base = sanitizeCharacter(playbook, prev[playbook.name] || getDefaultState(playbook));
@@ -284,12 +457,21 @@ export default function App() {
 
     const reader = new FileReader();
     reader.onload = (event) => {
-      updateState({ image: event.target?.result || null });
+      updateState({ image: event.target?.result || null, useDefaultPortrait: false });
     };
     reader.readAsDataURL(file);
   };
 
-  const handleRemoveBackground = async () => {
+  const handleRestoreDefaultPortrait = () => {
+    if (!defaultPortrait) return;
+    updateState({ image: null, useDefaultPortrait: true });
+  };
+
+  const handleRemovePortrait = () => {
+    updateState({ image: null, useDefaultPortrait: false });
+  };
+
+  const handleRemoveBackgroundFromImage = async () => {
     if (!currentState.image || isRemovingBg) return;
 
     setIsRemovingBg(true);
@@ -334,13 +516,31 @@ export default function App() {
       }
 
       ctx.putImageData(imageData, 0, 0);
-      updateState({ image: canvas.toDataURL("image/png") });
+      updateState({ image: canvas.toDataURL("image/png"), useDefaultPortrait: false });
     } catch {
-      // Ignore background-removal failures and keep original image.
+      // Keep original portrait if background remover fails.
     } finally {
       setIsRemovingBg(false);
     }
   };
+
+  const handleBackgroundNext = () => {
+    if (totalBackgrounds === 0) return;
+    setSelectedBgIndex((prev) => {
+      if (prev < 0 || prev >= totalBackgrounds) return 0;
+      return (prev + 1) % totalBackgrounds;
+    });
+  };
+
+  const handleBackgroundPrev = () => {
+    if (totalBackgrounds === 0) return;
+    setSelectedBgIndex((prev) => {
+      if (prev < 0 || prev >= totalBackgrounds) return totalBackgrounds - 1;
+      return (prev - 1 + totalBackgrounds) % totalBackgrounds;
+    });
+  };
+
+  const clearBackground = () => setSelectedBgIndex(-1);
 
   const handleStatIncrease = (stat) => {
     if (!currentState.bonusStat && playbook.stats[stat] < 2) {
@@ -470,8 +670,8 @@ export default function App() {
         </div>
       </aside>
 
-      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-[url('https://www.transparenttextures.com/patterns/aged-paper.png')] min-w-0">
-        <header className="bg-white border-b border-stone-300 p-4 flex items-center sticky top-0 z-10 shadow-sm min-w-0 gap-3">
+      <main className="flex-1 flex flex-col h-screen overflow-hidden min-w-0" style={mainBackgroundStyle}>
+        <header className="bg-white/95 border-b border-stone-300 p-4 flex items-center sticky top-0 z-10 shadow-sm min-w-0 gap-3">
           <button
             className="md:hidden text-stone-700 hover:text-stone-900 flex-shrink-0"
             onClick={() => setSidebarOpen(true)}
@@ -485,9 +685,36 @@ export default function App() {
             </h2>
           </div>
 
+          <div className="hidden lg:flex items-center gap-1 rounded-lg border border-stone-300 bg-white px-2 py-1">
+            <button
+              onClick={handleBackgroundPrev}
+              className="px-2 py-1 rounded hover:bg-stone-100 text-stone-700"
+              title={t.bgPrev}
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              onClick={handleBackgroundNext}
+              className="px-2 py-1 rounded hover:bg-stone-100 text-stone-700"
+              title={t.bgNext}
+            >
+              <ChevronRight size={16} />
+            </button>
+            <button
+              onClick={clearBackground}
+              className="px-2 py-1 rounded hover:bg-stone-100 text-stone-700"
+              title={t.bgClear}
+            >
+              <RotateCcw size={16} />
+            </button>
+            <span className="text-xs text-stone-600 ml-1">
+              {activeBackground ? t.bgSelected(selectedBgIndex, totalBackgrounds) : t.bgNoSelection}
+            </span>
+          </div>
+
           <div className="flex items-center gap-2 flex-shrink-0">
             <span className="hidden sm:inline text-xs text-stone-600">{t.language}</span>
-            <div className="flex rounded-lg border border-stone-300 overflow-hidden">
+            <div className="flex rounded-lg border border-stone-300 overflow-hidden bg-white">
               <button
                 onClick={() => setLanguage("ru")}
                 className={`px-2.5 py-1.5 text-xs font-semibold ${
@@ -508,16 +735,47 @@ export default function App() {
           </div>
         </header>
 
+        <div className="lg:hidden px-4 pt-3">
+          <div className="flex items-center gap-2 rounded-lg border border-stone-300 bg-white px-2 py-2">
+            <button
+              onClick={handleBackgroundPrev}
+              className="px-2 py-1 rounded hover:bg-stone-100 text-stone-700"
+              title={t.bgPrev}
+            >
+              <ChevronLeft size={16} />
+            </button>
+            <button
+              onClick={handleBackgroundNext}
+              className="px-2 py-1 rounded hover:bg-stone-100 text-stone-700"
+              title={t.bgNext}
+            >
+              <ChevronRight size={16} />
+            </button>
+            <button
+              onClick={clearBackground}
+              className="px-2 py-1 rounded hover:bg-stone-100 text-stone-700"
+              title={t.bgClear}
+            >
+              <RotateCcw size={16} />
+            </button>
+            <span className="text-xs text-stone-600 ml-1">
+              {activeBackground ? t.bgSelected(selectedBgIndex, totalBackgrounds) : t.bgNoSelection}
+            </span>
+          </div>
+        </div>
+
         <div className="flex-1 overflow-y-auto p-4 md:p-6 lg:p-8">
           <div className="max-w-5xl mx-auto space-y-8 pb-16">
             <div className="flex flex-col lg:flex-row gap-6 lg:gap-8">
               <div className="w-full sm:max-w-xs mx-auto lg:w-1/3 lg:max-w-none flex-shrink-0">
                 <div className="aspect-[3/4] rounded-2xl border-[6px] border-stone-800 bg-stone-200 flex flex-col items-center justify-center relative overflow-hidden shadow-lg">
-                  {currentState.image ? (
+                  {portraitToDisplay ? (
                     <img
-                      src={currentState.image}
+                      src={portraitToDisplay}
                       alt="Портрет персонажа"
                       className="w-full h-full object-contain object-bottom drop-shadow-2xl"
+                      loading="lazy"
+                      decoding="async"
                     />
                   ) : (
                     <label className="cursor-pointer flex flex-col items-center justify-center text-stone-700 hover:text-amber-700 transition-colors h-full w-full bg-stone-100 hover:bg-amber-50">
@@ -538,29 +796,41 @@ export default function App() {
                   )}
                 </div>
 
-                {currentState.image && (
-                  <div className="mt-3 grid grid-cols-2 gap-2">
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {currentState.image && (
                     <button
-                      onClick={handleRemoveBackground}
+                      onClick={handleRemoveBackgroundFromImage}
                       disabled={isRemovingBg}
                       className="px-3 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold disabled:opacity-70"
                     >
                       <Sparkles size={14} className="inline mr-1" />
                       {isRemovingBg ? t.removeBgBusy : t.removeBg}
                     </button>
+                  )}
+
+                  {portraitToDisplay && (
                     <button
-                      onClick={() => updateState({ image: null })}
+                      onClick={handleRemovePortrait}
                       className="px-3 py-2 rounded-lg bg-red-600 hover:bg-red-700 text-white text-sm font-semibold"
                     >
                       <Trash2 size={14} className="inline mr-1" />
                       {t.removePortrait}
                     </button>
-                  </div>
-                )}
+                  )}
+
+                  {!portraitToDisplay && defaultPortrait && (
+                    <button
+                      onClick={handleRestoreDefaultPortrait}
+                      className="col-span-2 px-3 py-2 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold"
+                    >
+                      {t.restoreDefaultPortrait}
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="w-full lg:w-2/3 flex flex-col gap-6 min-w-0">
-                <div className="bg-white p-5 md:p-6 rounded-2xl shadow-sm border border-stone-300">
+                <div className="bg-white/95 p-5 md:p-6 rounded-2xl shadow-sm border border-stone-300">
                   <p className="text-lg md:text-xl text-stone-900 leading-8">{displayDescription(playbook)}</p>
                 </div>
 
@@ -577,7 +847,7 @@ export default function App() {
                           className={`text-left rounded-xl shadow-sm border p-5 transition-all cursor-pointer group flex flex-col min-w-0 ${
                             isSelected
                               ? "bg-amber-100 border-amber-600 ring-2 ring-amber-300"
-                              : "bg-white border-stone-300 hover:border-amber-500"
+                              : "bg-white/95 border-stone-300 hover:border-amber-500"
                           }`}
                           onClick={() => updateState({ nature: nature.name })}
                         >
@@ -622,7 +892,7 @@ export default function App() {
                   return (
                     <div
                       key={stat}
-                      className={`col-span-2 ${mobilePlacement} md:col-auto w-full md:w-32 bg-white rounded-xl border-2 flex flex-col items-center overflow-hidden transition-all shadow-sm ${
+                      className={`col-span-2 ${mobilePlacement} md:col-auto w-full md:w-32 bg-white/95 rounded-xl border-2 flex flex-col items-center overflow-hidden transition-all shadow-sm ${
                         isBuffed ? "border-emerald-600 ring-2 ring-emerald-200" : "border-stone-300"
                       }`}
                     >
@@ -665,7 +935,7 @@ export default function App() {
                 <h3 className="text-xl font-display font-bold text-stone-900 uppercase tracking-wide mb-4 border-b-2 border-stone-400 pb-2 flex items-center gap-2">
                   <Shield className="text-stone-700 flex-shrink-0" size={20} /> {t.feats}
                 </h3>
-                <div className="bg-white rounded-xl border border-stone-300 p-4 shadow-sm flex-1">
+                <div className="bg-white/95 rounded-xl border border-stone-300 p-4 shadow-sm flex-1">
                   <p className="text-xs text-stone-700 mb-4 uppercase tracking-wider font-semibold break-words">
                     {getFeatHint()}
                   </p>
@@ -716,7 +986,7 @@ export default function App() {
                 <h3 className="text-xl font-display font-bold text-stone-900 uppercase tracking-wide mb-4 border-b-2 border-stone-400 pb-2 flex items-center gap-2">
                   <Sword className="text-stone-700 flex-shrink-0" size={20} /> {t.skills}
                 </h3>
-                <div className="bg-white rounded-xl border border-stone-300 p-4 shadow-sm flex-1">
+                <div className="bg-white/95 rounded-xl border border-stone-300 p-4 shadow-sm flex-1">
                   <p className="text-xs text-stone-700 mb-4 uppercase tracking-wider font-semibold break-words">
                     {t.skillsHint}
                   </p>
@@ -786,7 +1056,7 @@ export default function App() {
                       } ${
                         isDisabled
                           ? "opacity-60 bg-stone-100 cursor-not-allowed"
-                          : "bg-white cursor-pointer hover:border-blue-400"
+                          : "bg-white/95 cursor-pointer hover:border-blue-400"
                       }`}
                       onClick={() => {
                         if (!isDisabled) handleMoveToggle(move.name, isMandatory);
