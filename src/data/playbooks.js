@@ -1,3 +1,32 @@
+import baseStatsCsv from "../../root_base_stats.csv?raw";
+import dlcStatsCsv from "../../root_dlc_stats.csv?raw";
+
+function parsePlaybookStatsCsv(csvText) {
+  const lines = csvText.trim().split(/\r?\n/).filter(Boolean);
+  const [, ...rows] = lines;
+
+  return rows.reduce((acc, row) => {
+    const [playbookName, charm, cunning, finesse, luck, might] = row.split(",");
+
+    if (!playbookName) return acc;
+
+    acc[playbookName.trim()] = {
+      Шарм: Number(charm),
+      Хитрость: Number(cunning),
+      Сноровка: Number(finesse),
+      Удача: Number(luck),
+      Мощь: Number(might)
+    };
+
+    return acc;
+  }, {});
+}
+
+const statsFromCsv = {
+  ...parsePlaybookStatsCsv(baseStatsCsv),
+  ...parsePlaybookStatsCsv(dlcStatsCsv)
+};
+
 export const allFeats = [
   "Акробатика",
   "Вскрытие замков",
@@ -23,7 +52,7 @@ export const allSkills = [
   "Хитрый выстрел"
 ];
 
-export const playbooks = [
+const playbooksRaw = [
   {
     name: "Поборник",
     description:
@@ -996,3 +1025,8 @@ export const playbooks = [
     ]
   }
 ];
+
+export const playbooks = playbooksRaw.map((playbook) => ({
+  ...playbook,
+  stats: statsFromCsv[playbook.name] || playbook.stats
+}));

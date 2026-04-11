@@ -1,0 +1,10 @@
+Буклет (Playbook),Шарм (Charm),Хитрость (Cunning),Сноровка (Finesse),Удача (Luck),Мощь (Might)
+Авантюрист (The Adventurer),+2,+1,0,0,-1
+Судья (The Arbiter),+1,0,0,-1,+2
+Налётчик (The Vagrant),0,-1,+2,+1,0
+Следопыт (The Ranger),-1,+1,+1,0,+1
+Ронин (The Ronin),0,+1,0,-1,+2
+Поджигатель (The Scoundrel),+1,-1,0,+2,0
+Вор (The Thief),0,0,+2,+1,-1
+Ремесленник (The Tinker),-1,+2,+1,0,0
+Скиталец (The Vagabond),+2,+1,-1,0,0
