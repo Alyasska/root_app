@@ -741,9 +741,12 @@ const parseBgIndex = (value) => {
 };
 
 export default function App() {
-  const [selectedIdx, setSelectedIdx] = useState(0);
+  const [selectedIdx, setSelectedIdx] = useState(() => {
+    const adventurerIndex = playbooks.findIndex((pb) => pb.name === "Авантюрист");
+    return adventurerIndex >= 0 ? adventurerIndex : 0;
+  });
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const [language, setLanguage] = useState(() => localStorage.getItem(LANGUAGE_KEY) || "ru");
+  const [language, setLanguage] = useState(() => localStorage.getItem(LANGUAGE_KEY) || "en");
   const [isRemovingBg, setIsRemovingBg] = useState(false);
   const [selectedBgIndex, setSelectedBgIndex] = useState(() =>
     parseBgIndex(localStorage.getItem(BG_STORAGE_KEY))
