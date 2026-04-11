@@ -7,10 +7,11 @@ function parsePlaybookStatsCsv(csvText) {
 
   return rows.reduce((acc, row) => {
     const [playbookName, charm, cunning, finesse, luck, might] = row.split(",");
+    const normalizedName = playbookName?.split(" (")[0]?.trim();
 
-    if (!playbookName) return acc;
+    if (!normalizedName) return acc;
 
-    acc[playbookName.trim()] = {
+    acc[normalizedName] = {
       Шарм: Number(charm),
       Хитрость: Number(cunning),
       Сноровка: Number(finesse),
