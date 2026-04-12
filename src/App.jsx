@@ -19,7 +19,8 @@ import {
   RotateCcw
 } from "lucide-react";
 import { allFeats, allSkills, playbooks } from "./data/playbooks";
-import moveDescEnByPlaybook from "./data/moveDescEnByPlaybook";
+import { playbookNameEn } from "./content/localizationData";
+import { getLocalizer } from "./i18n/localization";
 import frameSvg from "../frame.svg";
 
 const STORAGE_KEY = "root-playbook-state-v5";
@@ -85,392 +86,6 @@ function ProgressiveImage({
     </div>
   );
 }
-
-const uiText = {
-  ru: {
-    appTitle: "Буклеты",
-    appFooter: "Root RPG: Базовая книга и Странники и Изгои",
-    editionOutcasts: "Root RPG: Странники и Изгои (дополнение)",
-    editionCore: "Root RPG: Базовая книга",
-    uploadPortrait: "Загрузить портрет",
-    portraitHint: "(Рекомендуется без фона)",
-    restoreDefaultPortrait: "Вставить дефолтный портрет",
-    removePortrait: "Убрать портрет",
-    removeBg: "Убрать фон",
-    removeBgBusy: "Удаляю фон...",
-    restoreBg: "Вернуть фон",
-    bgPrev: "Пред. фон",
-    bgNext: "След. фон",
-    bgClear: "Убрать фон",
-    bgNoSelection: "Фон: выключен",
-    bgSelected: (idx, total) => `Фон: ${idx + 1}/${total}`,
-    chooseNature: "Выберите свою натуру",
-    selectedNature: "Выбрано",
-    stats: "Характеристики",
-    statsHint: "Добавьте +1 к характеристике на выбор (макс. +2)",
-    feats: "Плутовские приёмы",
-    featsHintFixed: "Только отмеченные в бланке (без доп. выбора)",
-    featsHintAny: (count) => `Свободный выбор любых ${count}`,
-    featsHintFixedPlusAny: (count) => `Отмеченные + выберите ещё ${count}`,
-    skills: "Оружейные навыки",
-    skillsHint: "Выберите 1 навык из выделенных",
-    moves: "Ваши ходы",
-    starting: "СТАРТОВЫЙ",
-    language: "Язык"
-  },
-  en: {
-    appTitle: "Playbooks",
-    appFooter: "Root RPG: Core Book and Travelers & Outsiders",
-    editionOutcasts: "Root RPG: Travelers & Outsiders Expansion",
-    editionCore: "Root RPG: Core Book",
-    uploadPortrait: "Upload portrait",
-    portraitHint: "(Transparent background is recommended)",
-    restoreDefaultPortrait: "Insert default portrait",
-    removePortrait: "Remove portrait",
-    removeBg: "Remove Background",
-    removeBgBusy: "Removing background...",
-    restoreBg: "Restore Background",
-    bgPrev: "Prev bg",
-    bgNext: "Next bg",
-    bgClear: "Clear bg",
-    bgNoSelection: "Background: off",
-    bgSelected: (idx, total) => `Background: ${idx + 1}/${total}`,
-    chooseNature: "Choose your nature",
-    selectedNature: "Selected",
-    stats: "Stats",
-    statsHint: "Add +1 to one stat (max +2)",
-    feats: "Roguish feats",
-    featsHintFixed: "Fixed by the playbook (no extra picks)",
-    featsHintAny: (count) => `Free pick: any ${count}`,
-    featsHintFixedPlusAny: (count) => `Fixed feats + pick ${count} more`,
-    skills: "Weapon skills",
-    skillsHint: "Choose 1 highlighted skill",
-    moves: "Your moves",
-    starting: "STARTING",
-    language: "Language"
-  }
-};
-
-const statLabel = {
-  ru: {
-    Шарм: "Шарм",
-    Хитрость: "Хитрость",
-    Сноровка: "Сноровка",
-    Удача: "Удача",
-    Мощь: "Мощь"
-  },
-  en: {
-    Шарм: "Charm",
-    Хитрость: "Cunning",
-    Сноровка: "Finesse",
-    Удача: "Luck",
-    Мощь: "Might"
-  }
-};
-
-const playbookNameEn = {
-  Поборник: "Champion",
-  Летописец: "Chronicler",
-  Изгнанник: "Exile",
-  Посланник: "Envoy",
-  Еретик: "Heretic",
-  Пират: "Pirate",
-  Принц: "Prince",
-  Рассказчик: "Raconteur",
-  Разбойник: "Raider",
-  Искатель: "Seeker",
-  Авантюрист: "Adventurer",
-  Судья: "Arbiter",
-  Налётчик: "Harrier",
-  Следопыт: "Ranger",
-  Ронин: "Ronin",
-  Поджигатель: "Scoundrel",
-  Вор: "Thief",
-  Ремесленник: "Tinker",
-  Скиталец: "Vagrant"
-};
-
-const playbookDescriptionEn = {
-  Поборник: "You are a rising hero and standard-bearer of lost causes, sworn to protect the weak.",
-  Летописец: "You preserve forbidden knowledge and hidden truths others would rather erase.",
-  Изгнанник: "Once a respected insider, you now define yourself by what you do after exile.",
-  Посланник: "You are a professional envoy, negotiating conflicts while staying plausibly deniable.",
-  Еретик: "You fight for beliefs most factions reject, convinced your cause serves a greater good.",
-  Пират: "A free river captain, you live by mobility, trade, and daring choices on open waters.",
-  Принц: "Born into vagabond legacy, you carry family expectation and inherited reputation.",
-  Рассказчик: "You shape public truth through stories, performances, and influence across clearings.",
-  Разбойник: "A dangerous bruiser-for-hire, you solve problems with force and battlefield pressure.",
-  Искатель: "You chase ruins, secrets, and wonders hidden in the oldest places of the Woodland.",
-  Авантюрист: "A diplomatic wanderer who builds alliances and changes power through trust.",
-  Судья: "A stubborn enforcer-protector who steps into conflict and decides where justice falls.",
-  Налётчик: "A fast operator and courier, always first through risk and hard routes.",
-  Следопыт: "A wilderness specialist who prefers the wild edge over crowded settlements.",
-  Ронин: "A masterless veteran seeking freedom, discipline, and purpose in a new land.",
-  Поджигатель: "A chaotic risk-taker who turns danger into leverage, mayhem, and opportunity.",
-  Вор: "A precise infiltrator who steals what others hide and disappears before the alarm.",
-  Ремесленник: "An inventive engineer whose tools, plans, and prototypes change what is possible.",
-  Скиталец: "A silver-tongued survivor who talks through danger and manipulates tension between enemies."
-};
-
-const natureNameEn = {
-  Защитник: "Defender",
-  Идеал: "Idealist",
-  Наблюдатель: "Observer",
-  Активист: "Activist",
-  Интриган: "Schemer",
-  Мститель: "Avenger",
-  Агент: "Agent",
-  Поклявшийся: "Oathbound",
-  Верующий: "Believer",
-  Целитель: "Healer",
-  Плут: "Rogue",
-  Торговец: "Trader",
-  Наследник: "Heir",
-  Первопроходец: "Trailblazer",
-  Легенда: "Legend",
-  Компаньон: "Companion",
-  Бандит: "Bandit",
-  Герой: "Hero",
-  Исследователь: "Explorer",
-  Историк: "Historian",
-  Экстраверт: "Extrovert",
-  Миротворец: "Peacemaker",
-  Каратель: "Enforcer",
-  Заводила: "Ringleader",
-  Исполнитель: "Operator",
-  Одиночка: "Loner",
-  Циник: "Cynic",
-  Выживший: "Survivor",
-  Пилигрим: "Pilgrim",
-  Диверсант: "Saboteur",
-  Забияка: "Hothead",
-  Бунтарь: "Rebel",
-  Клептоман: "Kleptomaniac",
-  Перфекционист: "Perfectionist",
-  Радикал: "Radical",
-  Делец: "Wheeler-Dealer",
-  Обжора: "Glutton"
-};
-
-const featNameEn = {
-  Акробатика: "Acrobatics",
-  "Вскрытие замков": "Lockpicking",
-  "Карманная кража": "Pickpocketing",
-  "Ловкость рук": "Sleight of Hand",
-  Незаметность: "Stealth",
-  "Отключение устройств": "Disable Devices",
-  Подделка: "Forgery",
-  Подкрадывание: "Sneaking",
-  "Слабое место": "Weak Point"
-};
-
-const skillNameEn = {
-  "Быстрый выстрел": "Quick Shot",
-  "Жестокий удар": "Brutal Strike",
-  "Импровизированное оружие": "Improvised Weapon",
-  "Нападение на группу": "Strike a Group",
-  Обезоруживание: "Disarm",
-  Парирование: "Parry",
-  Пробитие: "Pierce Armor",
-  "Сбивание с толку": "Confuse",
-  "Стрельба по группе": "Volley at a Group",
-  "Хитрый выстрел": "Trick Shot"
-};
-
-const moveNameEnByPlaybook = {
-  Поборник: {
-    "Ответить на зов": "Take Up the Call",
-    "Из народа": "Of the People",
-    "Мастерство против мастерства": "Skill Against Skill Alone",
-    "Правое дело": "A Just Cause",
-    "Грубая сила": "Raw Force"
-  },
-  Летописец: {
-    "Ценность книги": "The Worth of a Book",
-    "Нюх на настоящую историю": "An Eye for the Real Story",
-    "Поиск в архивах": "Search the Records",
-    "Хранитель знаний": "Loremaster",
-    "Хороший совет": "Good Advice",
-    "Преданный ученый": "Dedicated Scholar"
-  },
-  Изгнанник: {
-    "Известен всем": "Known by All",
-    "Выше всего этого": "Above It All",
-    "Я принес вам...": "I Bring You...",
-    "Величайший в эпохе": "Greatest of the Age",
-    "Рожден быть королем": "Born to Be a King",
-    "Красивая бумажка": "Fancy Paper"
-  },
-  Посланник: {
-    Дипломат: "Diplomat",
-    "Какая встреча!": "Fancy Meeting You Here",
-    Перебежчик: "Turncoat",
-    "Заговоры и интриги": "Plots and Schemes",
-    "Верь мне": "Trust in Me",
-    "Поцелуй кольцо": "Kiss the Ring"
-  },
-  Еретик: {
-    "Друзья познаются в беде": "Friends Indeed",
-    "Услышьте меня!": "Hear Me!",
-    "Разрушить нечто прекрасное": "Destroy Something Beautiful",
-    "Дьявольское обаяние": "Devilish Charm",
-    "Пуп земли": "Center of the Universe",
-    "Ты не пройдешь": "You Shall Not Pass"
-  },
-  Пират: {
-    "Маленький корабль": "Small Ship",
-    "Продолжать плавание": "Sail On",
-    Сорвиголова: "Swashbuckler",
-    "Глаз на сокровища": "Eye for Treasure",
-    "Много рома": "Plenty of Rum",
-    "Морская закалка": "Sea Legs"
-  },
-  Принц: {
-    "Фамильное оружие": "Heirloom Weapon",
-    Наследие: "Legacy",
-    "Один из нас": "One of Us",
-    Небылицы: "Tall Tales",
-    "Никакая тюрьма меня не удержит": "No Jail Can Hold Me",
-    Любимчик: "Favored"
-  },
-  Рассказчик: {
-    "Орудия труда": "Tools of the Trade",
-    "Преданные поклонники": "Adoring Fans",
-    "Все смотрят на меня": "All Eyes on Me",
-    "Ловкие пальцы, быстрые глаза": "Quick Fingers, Quicker Eyes",
-    "Подвешенный язык": "Silver Tongue",
-    "Сладкий как мед": "Sweet as Honey"
-  },
-  Разбойник: {
-    "Взгляд для битвы": "Eye for Battle",
-    "Железная шкура": "Ironhide",
-    "Грабеж и мародерство": "Loot and Plunder",
-    "Милосердный дух": "Merciful Wight",
-    "План атаки": "Plan of Attack",
-    "Ужасающий облик": "Fearsome Visage"
-  },
-  Искатель: {
-    Слухи: "Word on the Street",
-    "Никогда не теряюсь": "Never Lost",
-    "Охотник за сокровищами": "Treasure Hunter",
-    "Контракт авантюриста": "Adventurer Contract",
-    "Следи за знаками": "Watch the Signs",
-    "Неустойчивая земля": "Unstable Ground"
-  },
-  Авантюрист: {
-    "Безупречная репутация": "Impeccable Reputation",
-    "Держать лапу на пульсе": "Ear to the Ground",
-    "На короткой лапе": "Fast Friends",
-    Начитанный: "Well-Read",
-    Оратор: "Orator",
-    "Усмиряющие удары": "Subduing Strikes"
-  },
-  Судья: {
-    Здоровяк: "Brute",
-    "Ломать-крушить": "Smash and Wreck",
-    "Сильный выстрел": "Powerful Shot",
-    Стойкий: "Hardy",
-    Страж: "Defender",
-    "Тот, у кого палка больше": "Carry a Big Stick"
-  },
-  Налётчик: {
-    "Быстрые ноги и ловкие руки": "Quick Feet, Quicker Hands",
-    "Не стреляйте в гонца!": "Don't Shoot the Messenger!",
-    Паркур: "Parkour",
-    "Пойти напрямик": "Push Through",
-    "Талантливый путешественник": "Talented Traveler",
-    "Тропа контрабандиста": "Smuggler's Trail"
-  },
-  Следопыт: {
-    "Грязный боец": "Dirty Fighter",
-    "Тихие лапы": "Silent Paws",
-    "Угрожающий вид": "Menacing Visage",
-    Ускользнуть: "Slip Away",
-    Фуражир: "Forager",
-    "Яды и противоядия": "Poisons and Antidotes"
-  },
-  Ронин: {
-    Верность: "Fealty",
-    "Всегда начеку": "Always Watchful",
-    "Всегда при оружии": "Always Armed",
-    "Знаток желаний господина": "Master of the Master's Desires",
-    "Правила войны": "Rules of War",
-    "Хорошее воспитание": "Well-Mannered"
-  },
-  Поджигатель: {
-    "Взрывная натура": "Explosive Nature",
-    "Лик опасности": "Mask of Danger",
-    "Отвлекающий манёвр!": "Distraction!",
-    "Создано для разрушения": "Made to be Broken",
-    Сорвиголова: "Daredevil",
-    "Удача важнее умения": "Luck Over Skill"
-  },
-  Вор: {
-    "Вынюхать добычу": "Sniff Out the Mark",
-    "Исчезнуть во тьме": "Disappear into the Dark",
-    Лапки: "Small Paws",
-    "Обманный удар": "Feint",
-    "Проникновение со взломом": "Breaking and Entering",
-    "Профессиональный вор": "Master Thief"
-  },
-  Ремесленник: {
-    "Глубокие карманы": "Deep Pockets",
-    "Набор инструментов": "Toolbox",
-    "Острый ум": "Sharp Mind",
-    Починить: "Repair",
-    Разобрать: "Dismantle",
-    "Собрать наспех": "Jury Rig"
-  },
-  Скиталец: {
-    "Давай поиграем!": "Let's Play!",
-    "Острый язык": "Sharp Tongue",
-    "Песок из кармана": "Pocket Sand",
-    Подстрекатель: "Instigator",
-    "Приятный облик": "Pleasant Facade",
-    "Улыбка отчаяния": "Desperate Smile"
-  }
-};
-
-const natureDescEnByKey = {
-  "Поборник::Защитник": "Clear your exhaustion track when you confront a powerful NPC over their cruelty toward the weak.",
-  "Поборник::Идеал": "Clear your exhaustion track when you publicly commit to a difficult task on behalf of the Just and those they represent.",
-  "Летописец::Наблюдатель": "Clear your exhaustion track when you step into danger to witness an important secret event or meeting firsthand.",
-  "Летописец::Активист": "Clear your exhaustion track when you publicly challenge a clearing's leadership over changes you believe are vital.",
-  "Изгнанник::Интриган": "Clear your exhaustion track when you promise valuable resources to a dangerous woodland figure to gain their aid.",
-  "Изгнанник::Мститель": "Clear your exhaustion track when you openly strike at those who wronged you or your dependents.",
-  "Посланник::Агент": "Clear your exhaustion track when you negotiate a high-stakes agreement between rival powers.",
-  "Посланник::Поклявшийся": "Clear your exhaustion track when you keep your word despite serious personal cost.",
-  "Еретик::Верующий": "Clear your exhaustion track when you put your cause above your own safety.",
-  "Еретик::Целитель": "Clear your exhaustion track when you protect or aid someone persecuted for your shared beliefs.",
-  "Пират::Плут": "Clear your exhaustion track when you turn risk, swagger, or deception into profit.",
-  "Пират::Торговец": "Clear your exhaustion track when you close a lucrative deal by ship or port connections.",
-  "Принц::Наследник": "Clear your exhaustion track when your lineage opens doors or resolves a tense social conflict.",
-  "Принц::Первопроходец": "Clear your exhaustion track when you take the lead through danger to secure your band's path.",
-  "Рассказчик::Легенда": "Clear your exhaustion track when your performance reshapes how people see an event or person.",
-  "Рассказчик::Компаньон": "Clear your exhaustion track when you raise allies' spirits with stories, wit, or song.",
-  "Разбойник::Бандит": "Clear your exhaustion track when you seize advantage through force and intimidation.",
-  "Разбойник::Герой": "Clear your exhaustion track when you protect others at great personal risk.",
-  "Искатель::Исследователь": "Clear your exhaustion track when you uncover hidden knowledge or an unexplored place.",
-  "Искатель::Историк": "Clear your exhaustion track when you preserve or reveal meaningful truths about the Woodland.",
-  "Авантюрист::Экстраверт": "Clear your exhaustion track when you win over strangers and build useful social ties.",
-  "Авантюрист::Миротворец": "Clear your exhaustion track when you de-escalate a conflict that could become violent.",
-  "Судья::Защитник": "Clear your exhaustion track when you shield someone vulnerable from immediate danger.",
-  "Судья::Каратель": "Clear your exhaustion track when you impose consequences on those abusing power.",
-  "Налётчик::Заводила": "Clear your exhaustion track when you rally others into swift, coordinated action.",
-  "Налётчик::Исполнитель": "Clear your exhaustion track when you complete a dangerous delivery or mission under pressure.",
-  "Следопыт::Одиночка": "Clear your exhaustion track when you survive danger alone through skill and caution.",
-  "Следопыт::Циник": "Clear your exhaustion track when your hard-earned suspicion prevents a serious setback.",
-  "Ронин::Выживший": "Clear your exhaustion track when you endure hardship through discipline and grit.",
-  "Ронин::Пилигрим": "Clear your exhaustion track when you follow your code in a place where it is unwelcome.",
-  "Поджигатель::Диверсант": "Clear your exhaustion track when you disrupt enemy plans with chaos or destruction.",
-  "Поджигатель::Забияка": "Clear your exhaustion track when you provoke conflict to create an opening for your band.",
-  "Вор::Бунтарь": "Clear your exhaustion track when you defy authority and get away with it.",
-  "Вор::Клептоман": "Clear your exhaustion track when you acquire something valuable through theft or finesse.",
-  "Ремесленник::Перфекционист": "Clear your exhaustion track when your careful craft solves a difficult practical problem.",
-  "Ремесленник::Радикал": "Clear your exhaustion track when you risk your tools and reputation on an unorthodox solution.",
-  "Скиталец::Делец": "Clear your exhaustion track when you broker a deal that benefits you and your band.",
-  "Скиталец::Обжора": "Clear your exhaustion track when indulgence or appetite gets you useful leverage."
-};
 
 const playbookPortraitAliases = {
   Поборник: ["поборник", "champion"],
@@ -775,6 +390,9 @@ export default function App() {
 
   useEffect(() => {
     localStorage.setItem(LANGUAGE_KEY, language);
+    document.documentElement.lang = language;
+    document.documentElement.setAttribute("data-ui-lang", language);
+    window.dispatchEvent(new CustomEvent("root-language-changed", { detail: { language } }));
   }, [language]);
 
   useEffect(() => {
@@ -878,7 +496,8 @@ export default function App() {
     };
   }, []);
 
-  const t = uiText[language];
+  const i18n = useMemo(() => getLocalizer(language), [language]);
+  const { t } = i18n;
   const coreStartIndex = playbooks.findIndex((pb) => pb.name === "Авантюрист");
   const totalBackgrounds = ROOT_BACKGROUNDS.length;
 
@@ -1039,51 +658,23 @@ export default function App() {
     });
   };
 
-  const displayPlaybookName = (name) => {
-    if (language === "en") return playbookNameEn[name] || name;
-    return name;
-  };
+  const displayPlaybookName = i18n.playbookName;
 
-  const displayDescription = (pb) => {
-    if (language === "en") return playbookDescriptionEn[pb.name] || pb.description;
-    return pb.description;
-  };
+  const displayDescription = (pb) => i18n.playbookDescription(pb);
 
-  const displayNatureName = (natureName) => {
-    if (language === "en") return natureNameEn[natureName] || natureName;
-    return natureName;
-  };
+  const displayNatureName = (natureName) => i18n.natureName(natureName);
 
-  const displayNatureDescription = (playbookName, natureName, defaultDescription) => {
-    if (language === "en") {
-      return natureDescEnByKey[`${playbookName}::${natureName}`] || defaultDescription;
-    }
-    return defaultDescription;
-  };
+  const displayNatureDescription = (playbookName, natureName, defaultDescription) =>
+    i18n.natureDescription(playbookName, natureName, defaultDescription);
 
-  const displayMoveName = (playbookName, moveName) => {
-    if (language === "en") {
-      return moveNameEnByPlaybook[playbookName]?.[moveName] || moveName;
-    }
-    return moveName;
-  };
+  const displayMoveName = (playbookName, moveName) => i18n.moveName(playbookName, moveName);
 
-  const displayMoveDescription = (playbookName, moveName, defaultDescription) => {
-    if (language === "en") {
-      return moveDescEnByPlaybook[playbookName]?.[moveName] || defaultDescription;
-    }
-    return defaultDescription;
-  };
+  const displayMoveDescription = (playbookName, moveName, defaultDescription) =>
+    i18n.moveDescription(playbookName, moveName, defaultDescription);
 
-  const displayFeatName = (featName) => {
-    if (language === "en") return featNameEn[featName] || featName;
-    return featName;
-  };
+  const displayFeatName = (featName) => i18n.featName(featName);
 
-  const displaySkillName = (skillName) => {
-    if (language === "en") return skillNameEn[skillName] || skillName;
-    return skillName;
-  };
+  const displaySkillName = (skillName) => i18n.skillName(skillName);
 
   const getFeatHint = () => {
     if (featRule.mode === "any") return t.featsHintAny(featRule.count);
@@ -1416,17 +1007,7 @@ export default function App() {
   };
 
   const getMovesHeaderText = () => {
-    if (playbook.startingMoves.length > 0) {
-      const startingStr = playbook.startingMoves
-        .map((moveName) => displayMoveName(playbook.name, moveName))
-        .join(", ");
-      return language === "en"
-        ? `Starting: ${startingStr}. Choose ${playbook.movesCheck} more.`
-        : `Стартовые: ${startingStr}. Выберите ещё: ${playbook.movesCheck}.`;
-    }
-    return language === "en"
-      ? `Choose any ${playbook.movesCheck} moves.`
-      : `Свободный выбор: ${playbook.movesCheck} ходов.`;
+    return i18n.movesHeaderText(playbook, displayMoveName);
   };
 
   const selectedOptionalMovesCount = currentState.moves.filter(
@@ -1515,7 +1096,7 @@ export default function App() {
                   language === "ru" ? "bg-stone-900 text-white" : "bg-white text-stone-700"
                 }`}
               >
-                <Languages size={14} className="inline mr-1" /> RU
+                <Languages size={14} className="inline mr-1" /> {t.langRuShort}
               </button>
               <button
                 onClick={() => setLanguage("en")}
@@ -1523,7 +1104,7 @@ export default function App() {
                   language === "en" ? "bg-stone-900 text-white" : "bg-white text-stone-700"
                 }`}
               >
-                EN
+                {t.langEnShort}
               </button>
             </div>
           </div>
@@ -1548,7 +1129,7 @@ export default function App() {
                       <ProgressiveImage
                         src={activeBackground.url}
                         placeholderSrc={activeBackground.lowUrl}
-                        alt="Portrait background"
+                        alt={t.portraitBackgroundAlt}
                         className="w-full h-full"
                         imageClassName="object-cover"
                         loading="eager"
@@ -1559,7 +1140,7 @@ export default function App() {
 
                   <img
                     src={frameSvg}
-                    alt="Portrait frame"
+                    alt={t.portraitFrameAlt}
                     className="absolute inset-0 w-full h-full object-contain pointer-events-none select-none z-20 transform-gpu scale-[1.16] sm:scale-[1.24] md:scale-[1.32]"
                     loading="eager"
                     decoding="async"
@@ -1571,7 +1152,7 @@ export default function App() {
                       <div className="w-[86%] h-[90%] sm:w-[88%] sm:h-[93%] md:w-[90%] md:h-[96%]">
                         <img
                           src={portraitToDisplay}
-                          alt="Character portrait"
+                          alt={t.characterPortraitAlt}
                           className="w-full h-full object-contain drop-shadow-2xl transition-transform duration-200 ease-out"
                           style={{
                             transform: `translate(${portraitMassOffset.x}%, ${portraitMassOffset.y}%)`
@@ -1737,11 +1318,12 @@ export default function App() {
                       }`}
                     >
                       <div
+                        data-stat-key={stat}
                         className={`w-full py-1.5 md:py-2 text-center font-bold text-[10px] md:text-[11px] uppercase tracking-wider truncate px-1 ${
                           isBuffed ? "bg-emerald-600 text-white" : "bg-stone-100 text-stone-700"
                         }`}
                       >
-                        {statLabel[language][stat]}
+                        {i18n.statLabel(stat)}
                       </div>
                       <div className="py-3 md:py-4 text-2xl md:text-3xl font-black text-stone-900 flex items-center justify-center relative w-full">
                         <span className={isBuffed ? "text-emerald-700" : ""}>
@@ -1948,3 +1530,5 @@ export default function App() {
     </div>
   );
 }
+
+

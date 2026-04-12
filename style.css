@@ -1,0 +1,32 @@
+.tippy-box[data-theme~="forest-rpg"] {
+  background-color: #f4ecd8;
+  color: #2d1f12;
+  border: 1px solid #b89f77;
+  border-radius: 10px;
+  box-shadow: 0 10px 22px rgba(24, 16, 9, 0.3);
+  font-family: "Noto Serif", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: 0.98rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  line-height: 1.5;
+}
+
+.tippy-box[data-theme~="forest-rpg"] .tippy-content {
+  padding: 0.65rem 0.75rem;
+}
+
+.tippy-box[data-theme~="forest-rpg"][data-placement^="top"] > .tippy-arrow::before {
+  border-top-color: #f4ecd8;
+}
+
+.tippy-box[data-theme~="forest-rpg"][data-placement^="bottom"] > .tippy-arrow::before {
+  border-bottom-color: #f4ecd8;
+}
+
+.tippy-box[data-theme~="forest-rpg"][data-placement^="left"] > .tippy-arrow::before {
+  border-left-color: #f4ecd8;
+}
+
+.tippy-box[data-theme~="forest-rpg"][data-placement^="right"] > .tippy-arrow::before {
+  border-right-color: #f4ecd8;
+}
