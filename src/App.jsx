@@ -41,6 +41,72 @@ const FEAT_RULES = {
   Принц: { mode: "fixed-plus-any", count: 2 }
 };
 
+const SIGNATURE_FONT_PINNED_BY_PLAYBOOK = {
+  Авантюрист: '"Papyrus", "Book Antiqua", "Palatino Linotype", serif'
+};
+
+const SIGNATURE_FONT_POOL = [
+  '"Cinzel Decorative", "Cinzel", serif',
+  '"Uncial Antiqua", serif',
+  '"Special Elite", "Courier New", monospace',
+  '"EB Garamond", "Garamond", serif',
+  '"Cormorant Garamond", serif',
+  '"Playfair Display SC", "Playfair Display", serif',
+  '"Vollkorn SC", "Vollkorn", serif',
+  '"Marcellus SC", "Marcellus", serif',
+  '"Cardo", serif',
+  '"Alegreya SC", "Alegreya", serif',
+  '"Domine", serif',
+  '"Prata", serif',
+  '"Libre Baskerville", serif',
+  '"Bree Serif", serif',
+  '"Crimson Text", serif',
+  '"Spectral SC", "Spectral", serif',
+  '"IM Fell English SC", serif',
+  '"Gentium Book Plus", serif',
+  '"Arvo", serif',
+  '"Merriweather", serif',
+  '"Bookman Old Style", "Bookman", serif',
+  '"Palatino Linotype", "Palatino", serif',
+  '"Century Schoolbook", "Times New Roman", serif'
+];
+
+const hashText = (value) => {
+  const text = String(value || "");
+  let hash = 0;
+  for (let idx = 0; idx < text.length; idx += 1) {
+    hash = (hash << 5) - hash + text.charCodeAt(idx);
+    hash |= 0;
+  }
+  return Math.abs(hash);
+};
+
+const buildArchetypeSignatureFontMap = (allPlaybooks) => {
+  const map = { ...SIGNATURE_FONT_PINNED_BY_PLAYBOOK };
+  const usedFonts = new Set(Object.values(map));
+
+  allPlaybooks.forEach((pb) => {
+    if (map[pb.name]) return;
+
+    const natureSeed = (pb.natures || [])
+      .map((nature) => `${nature.name || ""} ${nature.desc || ""}`)
+      .join(" | ");
+    const seed = hashText(`${pb.name}::${natureSeed}`);
+    let index = seed % SIGNATURE_FONT_POOL.length;
+    let safety = 0;
+
+    while (usedFonts.has(SIGNATURE_FONT_POOL[index]) && safety < SIGNATURE_FONT_POOL.length) {
+      index = (index + 1) % SIGNATURE_FONT_POOL.length;
+      safety += 1;
+    }
+
+    map[pb.name] = SIGNATURE_FONT_POOL[index] || '"Noto Serif", Georgia, serif';
+    usedFonts.add(map[pb.name]);
+  });
+
+  return map;
+};
+
 function ProgressiveImage({
   src,
   placeholderSrc,
@@ -414,6 +480,853 @@ const parseBgIndex = (value) => {
   return Number.isInteger(index) ? index : -1;
 };
 
+const buildBlankCharacterSheetHtml = (lang = "en") => {
+  const isRu = lang === "ru";
+  const labels = {
+    title: isRu ? "Пустой лист персонажа" : "Blank Character Sheet",
+    name: isRu ? "Имя" : "Name",
+    role: isRu ? "Амплуа / Роль" : "Playbook / Role",
+    origin: isRu ? "Происхождение" : "Origin",
+    appearance: isRu ? "Деталь внешности" : "Appearance detail",
+    biography: isRu ? "Краткая биография" : "Short biography",
+    motives: isRu ? "Мотивы" : "Motives",
+    connections: isRu ? "Связи" : "Connections",
+    stats: isRu ? "Характеристики" : "Stats",
+    conditions: isRu ? "Состояния" : "Conditions",
+    moves: isRu ? "Ваши ходы" : "Moves",
+    skills: isRu ? "Умения" : "Skills",
+    equipment: isRu ? "Снаряжение" : "Equipment",
+    load: isRu ? "Нагрузка" : "Load",
+    max: isRu ? "Макс" : "Max",
+    reputation: isRu ? "Репутация" : "Reputation",
+    badFame: isRu ? "Дурная слава" : "Bad fame",
+    prestige: isRu ? "Престиж" : "Prestige",
+    factionPlaceholder: isRu ? "Название фракции" : "Faction name"
+  };
+
+  const statRows = Array.from({ length: 5 }, () => `
+    <div class="stat-row">
+      <div class="stat-value"></div>
+      <div class="line"></div>
+    </div>
+  `).join("");
+
+  const conditionRows = Array.from({ length: 4 }, () => `
+    <div class="condition-row">
+      <div class="line"></div>
+      <div class="check-row">
+        <span class="check-box"></span><span class="check-box"></span><span class="check-box"></span><span class="check-box"></span>
+      </div>
+    </div>
+  `).join("");
+
+  const moveRows = Array.from({ length: 4 }, () => `
+    <div class="move-block">
+      <div class="line move-title"></div>
+      <div class="move-text"></div>
+    </div>
+  `).join("");
+
+  const skillRows = Array.from({ length: 8 }, () => `
+    <div class="skill-row">
+      <span class="check-box"></span>
+      <div class="line"></div>
+    </div>
+  `).join("");
+
+  const reputationSegments = [
+    { label: "-3", count: 3, tone: "neg" },
+    { label: "-2", count: 3, tone: "neg" },
+    { label: "-1", count: 3, tone: "mid" },
+    { label: "+0", count: 5, tone: "mid" },
+    { label: "+1", count: 5, tone: "pos" },
+    { label: "+2", count: 5, tone: "pos" },
+    { label: "+3", count: 0, tone: "pos" }
+  ];
+
+  const reputationScale = reputationSegments
+    .map((segment) => {
+      const boxes = Array.from({ length: segment.count }, () => `<span class="rep-box ${segment.tone}"></span>`).join("");
+      return `<div class="rep-segment"><span class="rep-label ${segment.tone}">${segment.label}</span>${boxes}</div>`;
+    })
+    .join("");
+
+  const reputationRows = Array.from({ length: 5 }, (_, idx) => `
+    <div class="rep-row">
+      <div class="line ${idx === 0 ? "with-hint" : ""}">${idx === 0 ? labels.factionPlaceholder : ""}</div>
+      <div class="rep-track">${reputationScale}</div>
+    </div>
+  `).join("");
+
+  return `<!doctype html>
+<html lang="${lang}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${labels.title}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Lora:ital,wght@0,400;0,600;0,700;1,400&display=swap" rel="stylesheet" />
+  <style>
+    @page { size: A4; margin: 8mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Lora", Georgia, "Times New Roman", serif;
+      color: #2b2b2b;
+      background: radial-gradient(circle at top, #f9f6ef 0%, #e6dcc1 100%);
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .page {
+      width: 194mm;
+      height: 281mm;
+      margin: 0 auto;
+      padding: 6mm;
+      background: #fdfbf6;
+      border: 1px solid #d8ccaf;
+      border-radius: 8px;
+      box-shadow: 0 8px 20px rgba(40, 30, 10, 0.12);
+      overflow: hidden;
+    }
+    .sheet {
+      border: 1.5px solid #4a4235;
+      border-radius: 6px;
+      height: 100%;
+      padding: 4mm;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 3mm;
+    }
+    .title {
+      text-align: center;
+      font-size: 18px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      margin: 0;
+      color: #2b2b2b;
+    }
+    .header-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 3mm;
+    }
+    .line-group {
+      display: grid;
+      gap: 2mm;
+      background: rgba(255, 255, 255, 0.3);
+      border: 1px solid #d8ccaf;
+      border-radius: 5px;
+      padding: 2.5mm;
+    }
+    .line-item {
+      display: grid;
+      grid-template-columns: auto 1fr;
+      align-items: end;
+      gap: 2mm;
+    }
+    .label {
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      white-space: nowrap;
+      color: #4a4235;
+    }
+    .line {
+      min-height: 16px;
+      border-bottom: 1.4px solid #6b6151;
+      font-size: 11px;
+      color: #6f6658;
+      padding: 0 2px;
+    }
+    .with-hint {
+      color: #8a7e6c;
+      font-style: italic;
+    }
+    .big-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr 1fr;
+      gap: 2.6mm;
+      align-items: start;
+    }
+    .section {
+      border: 1px solid #d8ccaf;
+      border-radius: 5px;
+      padding: 2.6mm;
+      background: rgba(255, 255, 255, 0.2);
+    }
+    .section-title {
+      margin: 0 0 2.2mm;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      border-bottom: 1px dashed #8d816c;
+      padding-bottom: 1mm;
+      color: #2b2b2b;
+    }
+    .stat-row {
+      display: grid;
+      grid-template-columns: 26px 1fr;
+      gap: 2mm;
+      margin-bottom: 1.6mm;
+      align-items: end;
+    }
+    .stat-value {
+      height: 20px;
+      border: 1.4px solid #2b2b2b;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.3);
+    }
+    .condition-row, .skill-row {
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 1.6mm;
+      align-items: end;
+      margin-bottom: 1.4mm;
+    }
+    .skill-row {
+      grid-template-columns: auto 1fr;
+      align-items: center;
+    }
+    .check-row {
+      display: flex;
+      gap: 1mm;
+    }
+    .check-box {
+      width: 11px;
+      height: 11px;
+      border: 1.2px solid #2b2b2b;
+      border-radius: 2px;
+      display: inline-block;
+      flex: 0 0 11px;
+    }
+    .move-block {
+      margin-bottom: 1.8mm;
+    }
+    .move-title {
+      margin-bottom: 1.2mm;
+    }
+    .move-text {
+      min-height: 28px;
+      border: 1.3px dashed #b5a992;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.15);
+    }
+    .two-col {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2.6mm;
+    }
+    .text-area {
+      min-height: 34px;
+      border: 1.3px dashed #b5a992;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.15);
+    }
+    .equip-line {
+      display: grid;
+      grid-template-columns: auto 35px auto 35px;
+      gap: 1.4mm;
+      align-items: end;
+      margin-bottom: 1.8mm;
+    }
+    .small-line {
+      min-height: 16px;
+      border-bottom: 1.4px solid #6b6151;
+    }
+    .reputation-section {
+      border: 1px solid #d8ccaf;
+      border-radius: 5px;
+      padding: 2.6mm;
+      background: rgba(255, 255, 255, 0.2);
+    }
+    .rep-row {
+      display: grid;
+      grid-template-columns: 1fr 2.5fr;
+      gap: 2mm;
+      align-items: end;
+      margin-bottom: 1.2mm;
+    }
+    .rep-track {
+      display: flex;
+      flex-wrap: nowrap;
+      gap: 4px;
+      align-items: center;
+      min-width: 0;
+    }
+    .rep-segment {
+      display: flex;
+      gap: 2px;
+      align-items: center;
+    }
+    .rep-label {
+      font-size: 9px;
+      font-weight: 700;
+      min-width: 15px;
+      text-align: right;
+    }
+    .rep-label.neg { color: #8d3333; }
+    .rep-label.mid { color: #2d2d2d; }
+    .rep-label.pos { color: #2f6b4b; }
+    .rep-box {
+      width: 9px;
+      height: 12px;
+      border-radius: 2px;
+      border: 1px solid #2d2d2d;
+      display: inline-block;
+      background: transparent;
+    }
+    .rep-box.neg { border-color: #8d3333; }
+    .rep-box.pos { border-color: #2f6b4b; }
+    .rep-captions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2mm;
+      margin-top: 1mm;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .rep-captions .neg {
+      color: #8d3333;
+      border-top: 1px solid #8d3333;
+      padding-top: 2px;
+      text-align: center;
+    }
+    .rep-captions .pos {
+      color: #2f6b4b;
+      border-top: 1px solid #2f6b4b;
+      padding-top: 2px;
+      text-align: center;
+    }
+    @media print {
+      body { background: #fff; }
+      .page {
+        width: auto;
+        height: auto;
+        margin: 0;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+        padding: 0;
+      }
+      .sheet {
+        border-color: #2f2a22;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <div class="sheet">
+      <div class="title">${labels.title}</div>
+
+      <div class="header-grid">
+        <div class="line-group">
+          <div class="line-item"><div class="label">${labels.name}</div><div class="line"></div></div>
+          <div class="line-item"><div class="label">${labels.role}</div><div class="line"></div></div>
+        </div>
+        <div class="line-group">
+          <div class="line-item"><div class="label">${labels.origin}</div><div class="line"></div></div>
+          <div class="line-item"><div class="label">${labels.appearance}</div><div class="line"></div></div>
+        </div>
+      </div>
+
+      <div class="big-grid">
+        <section class="section">
+          <h2 class="section-title">${labels.stats}</h2>
+          ${statRows}
+          <h2 class="section-title" style="margin-top: 2mm;">${labels.conditions}</h2>
+          ${conditionRows}
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">${labels.moves}</h2>
+          ${moveRows}
+        </section>
+
+        <section class="section">
+          <h2 class="section-title">${labels.skills}</h2>
+          ${skillRows}
+          <h2 class="section-title" style="margin-top: 2mm;">${labels.equipment}</h2>
+          <div class="equip-line">
+            <div class="label">${labels.load}</div><div class="small-line"></div>
+            <div class="label">${labels.max}</div><div class="small-line"></div>
+          </div>
+          <div class="text-area"></div>
+        </section>
+      </div>
+
+      <div class="two-col">
+        <section class="section">
+          <h2 class="section-title">${labels.biography}</h2>
+          <div class="text-area"></div>
+        </section>
+        <section class="section">
+          <h2 class="section-title">${labels.motives}</h2>
+          <div class="line"></div>
+          <div class="line" style="margin-top: 2mm;"></div>
+          <h2 class="section-title" style="margin-top: 2mm;">${labels.connections}</h2>
+          <div class="line"></div>
+          <div class="line" style="margin-top: 2mm;"></div>
+        </section>
+      </div>
+
+      <section class="reputation-section">
+        <h2 class="section-title">${labels.reputation}</h2>
+        ${reputationRows}
+        <div class="rep-captions">
+          <div class="neg">${labels.badFame}</div>
+          <div class="pos">${labels.prestige}</div>
+        </div>
+      </section>
+    </div>
+  </div>
+
+</body>
+</html>`;
+};
+
+const escapeHtml = (value) =>
+  String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+
+const formatSignedNumber = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return "0";
+  return numeric > 0 ? `+${numeric}` : String(numeric);
+};
+
+const normalizeTextBlock = (value, fallback = "-") => {
+  const trimmed = typeof value === "string" ? value.trim() : "";
+  if (!trimmed) return fallback;
+  return escapeHtml(trimmed).replace(/\n/g, "<br />");
+};
+
+const normalizeListText = (items, fallback = "-") => {
+  if (!Array.isArray(items) || !items.length) return fallback;
+  const normalized = items
+    .map((item) => String(item || "").trim())
+    .filter(Boolean)
+    .map((item) => escapeHtml(item));
+  return normalized.length ? normalized.join(", ") : fallback;
+};
+
+const buildFilledCharacterSheetHtml = (profilePayload) => {
+  const lang = profilePayload?.language === "ru" ? "ru" : "en";
+  const localizer = getLocalizer(lang);
+  const { t } = localizer;
+  const story = localizationData.characterStoryOptions[lang] || localizationData.characterStoryOptions.en;
+  const playbookData = playbooks.find((item) => item.name === profilePayload?.playbookName) || null;
+  const background =
+    profilePayload?.background && typeof profilePayload.background === "object"
+      ? profilePayload.background
+      : {};
+
+  const statsMap = new Map(
+    (Array.isArray(profilePayload?.stats) ? profilePayload.stats : []).map((item) => [item.stat, item.value])
+  );
+
+  const statsMarkup = statsOrder
+    .map(
+      (stat) =>
+        `<div class="stat-row"><span>${escapeHtml(localizer.statLabel(stat))}</span><strong>${escapeHtml(
+          formatSignedNumber(statsMap.get(stat))
+        )}</strong></div>`
+    )
+    .join("");
+
+  const featsText = normalizeListText(
+    (Array.isArray(profilePayload?.feats) ? profilePayload.feats : []).map((feat) => localizer.featName(feat))
+  );
+  const skillsText = normalizeListText(
+    (Array.isArray(profilePayload?.skills) ? profilePayload.skills : []).map((skill) => localizer.skillName(skill))
+  );
+
+  const movesMarkup = (Array.isArray(profilePayload?.moves) ? profilePayload.moves : []).length
+    ? (Array.isArray(profilePayload?.moves) ? profilePayload.moves : [])
+        .map((moveName) => {
+          const moveData = playbookData?.moves?.find((move) => move.name === moveName);
+          const moveTitle = localizer.moveName(profilePayload?.playbookName, moveName);
+          const moveDescription = localizer.moveDescription(
+            profilePayload?.playbookName,
+            moveName,
+            moveData?.desc || ""
+          );
+          return `<article class="move-item"><h4>${escapeHtml(moveTitle)}</h4><p>${normalizeTextBlock(
+            moveDescription
+          )}</p></article>`;
+        })
+        .join("")
+    : `<p class="muted">-</p>`;
+
+  const motivesText = normalizeListText(background?.motives);
+  const customMotivesMarkup = Array.isArray(background?.customMotives) && background.customMotives.length
+    ? background.customMotives
+        .map((motive) => {
+          const title = normalizeTextBlock(motive?.title || "", "-");
+          const desc = normalizeTextBlock(motive?.description || "", "-");
+          return `<li><strong>${title}</strong>: ${desc}</li>`;
+        })
+        .join("")
+    : `<li class="muted">-</li>`;
+
+  const connectionsMarkup = [0, 1]
+    .map((idx) => {
+      const connection = Array.isArray(background?.connections) ? background.connections[idx] : null;
+      const role = normalizeTextBlock(connection?.role || "", "-");
+      const characterName = normalizeTextBlock(connection?.characterName || "", "-");
+      const label = idx === 0 ? t.connectionOneLabel : t.connectionTwoLabel;
+      return `<li><strong>${escapeHtml(label)}</strong>: ${role} - ${characterName}</li>`;
+    })
+    .join("");
+
+  const factionRowsMarkup = (Array.isArray(story?.factions) ? story.factions : [])
+    .map((faction, idx) => {
+      const value = clampReputation(background?.factionReputation?.[idx]);
+      const tone = value < 0 ? "neg" : value > 0 ? "pos" : "mid";
+      return `<div class="rep-row"><span>${escapeHtml(faction)}</span><strong class="${tone}">${escapeHtml(
+        formatSignedNumber(value)
+      )}</strong></div>`;
+    })
+    .join("");
+
+  const savedAtText = profilePayload?.savedAt
+    ? new Date(profilePayload.savedAt).toLocaleString(lang === "ru" ? "ru-RU" : "en-US")
+    : "";
+
+  const portraitMarkup = profilePayload?.portrait
+    ? `<img src="${escapeHtml(profilePayload.portrait)}" alt="${escapeHtml(
+        t.characterPortraitAlt
+      )}" class="portrait-image" />`
+    : `<div class="portrait-placeholder">${escapeHtml(t.characterPortraitAlt)}</div>`;
+
+  const portraitBgMarkup = profilePayload?.backgroundImage
+    ? `<img src="${escapeHtml(profilePayload.backgroundImage)}" alt="" aria-hidden="true" class="portrait-bg" />`
+    : "";
+
+  return `<!doctype html>
+<html lang="${lang}">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>${escapeHtml(t.profileReadyTitle)}</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Lora:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    @page { size: A4; margin: 6mm; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Lora", Georgia, serif;
+      color: #2b2b2b;
+      background: radial-gradient(circle at top, #f9f6ef 0%, #e6dcc1 100%);
+      -webkit-print-color-adjust: exact;
+      print-color-adjust: exact;
+    }
+    .page {
+      width: 198mm;
+      height: 285mm;
+      margin: 0 auto;
+      padding: 4mm;
+      border: 1px solid #d8ccaf;
+      border-radius: 8px;
+      background: #fdfbf6;
+      box-shadow: 0 8px 18px rgba(40, 30, 10, 0.14);
+      overflow: hidden;
+      display: grid;
+      grid-template-rows: auto 1fr auto;
+      gap: 3mm;
+    }
+    .header {
+      display: grid;
+      grid-template-columns: 1fr 44mm;
+      gap: 3mm;
+      align-items: stretch;
+      border: 1px solid #d8ccaf;
+      border-radius: 6px;
+      padding: 2.5mm;
+      background: rgba(255, 255, 255, 0.35);
+    }
+    .title {
+      margin: 0;
+      font-size: 16px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-weight: 700;
+    }
+    .meta {
+      margin-top: 1.6mm;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.3mm 2.2mm;
+      font-size: 10px;
+    }
+    .meta div { min-width: 0; }
+    .meta strong {
+      display: block;
+      font-size: 9px;
+      color: #5b5346;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+    .portrait-wrap {
+      border: 1px solid #cfc1a2;
+      border-radius: 4px;
+      overflow: hidden;
+      position: relative;
+      background: #eee5d2;
+    }
+    .portrait-bg {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0.5;
+    }
+    .portrait-image {
+      position: relative;
+      z-index: 1;
+      width: 100%;
+      height: 100%;
+      object-fit: contain;
+    }
+    .portrait-placeholder {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      height: 100%;
+      font-size: 9px;
+      text-transform: uppercase;
+      color: #6f6658;
+      letter-spacing: 0.08em;
+      text-align: center;
+      padding: 2mm;
+    }
+    .columns {
+      display: grid;
+      grid-template-columns: 1fr 1.1fr 1fr;
+      gap: 2.6mm;
+      min-height: 0;
+    }
+    .section {
+      border: 1px solid #d8ccaf;
+      border-radius: 6px;
+      padding: 2.3mm;
+      background: rgba(255, 255, 255, 0.25);
+      overflow: hidden;
+      min-height: 0;
+    }
+    .section h3 {
+      margin: 0 0 1.6mm;
+      padding-bottom: 1mm;
+      border-bottom: 1px dashed #8d816c;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .stack { display: grid; gap: 2.2mm; }
+    .stat-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 10px;
+      border-bottom: 1px solid #ece4d1;
+      padding-bottom: 0.8mm;
+    }
+    .pair-label {
+      margin: 0;
+      font-size: 9px;
+      line-height: 1.45;
+    }
+    .pair-label strong {
+      display: block;
+      font-size: 8px;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: #5b5346;
+      margin-bottom: 0.4mm;
+    }
+    .small-list {
+      margin: 0;
+      padding-left: 4.5mm;
+      font-size: 9px;
+      line-height: 1.35;
+      display: grid;
+      gap: 0.8mm;
+    }
+    .moves {
+      display: grid;
+      gap: 1.5mm;
+      font-size: 8.7px;
+      line-height: 1.35;
+      max-height: 161mm;
+      overflow: hidden;
+    }
+    .move-item h4 {
+      margin: 0 0 0.5mm;
+      font-size: 9px;
+      color: #2a2420;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .move-item p { margin: 0; }
+    .reputation {
+      border: 1px solid #d8ccaf;
+      border-radius: 6px;
+      padding: 2.4mm;
+      background: rgba(255, 255, 255, 0.22);
+    }
+    .reputation-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 1.4mm;
+      gap: 2mm;
+    }
+    .reputation-head h3 {
+      margin: 0;
+      font-size: 10px;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+    }
+    .reputation-head .meta-date {
+      font-size: 8px;
+      color: #6d6558;
+      text-align: right;
+    }
+    .rep-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2.2mm;
+    }
+    .rep-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      font-size: 9px;
+      border-bottom: 1px dotted #d3c4a8;
+      padding: 0.7mm 0;
+    }
+    .neg { color: #8d3333; }
+    .mid { color: #3b3b3b; }
+    .pos { color: #2f6b4b; }
+    .muted { color: #756b5b; font-style: italic; }
+    @media print {
+      body { background: #fff; }
+      .page {
+        width: auto;
+        height: auto;
+        margin: 0;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="header">
+      <div>
+        <h1 class="title">${escapeHtml(t.profileReadyTitle)}</h1>
+        <div class="meta">
+          <div><strong>${escapeHtml(t.nameLabel)}</strong>${normalizeTextBlock(background?.name || "")}</div>
+          <div><strong>${escapeHtml(t.animalTypeLabel)}</strong>${normalizeTextBlock(background?.animalType || "")}</div>
+          <div><strong>${escapeHtml(t.appearanceLabel)}</strong>${normalizeTextBlock(background?.appearance || "")}</div>
+          <div><strong>${escapeHtml(t.profileSectionBuild)}</strong>${normalizeTextBlock(
+            localizer.playbookName(profilePayload?.playbookName || "")
+          )}</div>
+          <div><strong>${escapeHtml(t.chooseNature)}</strong>${normalizeTextBlock(
+            profilePayload?.nature ? localizer.natureName(profilePayload.nature) : "",
+            "-"
+          )}</div>
+          <div><strong>${escapeHtml(t.language)}</strong>${escapeHtml(lang.toUpperCase())}</div>
+        </div>
+      </div>
+      <div class="portrait-wrap">${portraitBgMarkup}${portraitMarkup}</div>
+    </header>
+
+    <div class="columns">
+      <section class="section stack">
+        <div>
+          <h3>${escapeHtml(t.stats)}</h3>
+          <div class="stack">${statsMarkup}</div>
+        </div>
+        <div>
+          <h3>${escapeHtml(t.feats)}</h3>
+          <p class="pair-label">${featsText}</p>
+        </div>
+        <div>
+          <h3>${escapeHtml(t.skills)}</h3>
+          <p class="pair-label">${skillsText}</p>
+        </div>
+      </section>
+
+      <section class="section">
+        <h3>${escapeHtml(t.moves)}</h3>
+        <div class="moves">${movesMarkup}</div>
+      </section>
+
+      <section class="section stack">
+        <div>
+          <h3>${escapeHtml(t.biographyLabel)}</h3>
+          <p class="pair-label">${normalizeTextBlock(background?.biography || "")}</p>
+        </div>
+        <div>
+          <h3>${escapeHtml(t.motivesLabel)}</h3>
+          <p class="pair-label">${motivesText}</p>
+        </div>
+        <div>
+          <h3>${escapeHtml(t.otherMotivesLabel)}</h3>
+          <ul class="small-list">${customMotivesMarkup}</ul>
+        </div>
+        <div>
+          <h3>${escapeHtml(t.connectionsLabel)}</h3>
+          <ul class="small-list">${connectionsMarkup}</ul>
+        </div>
+      </section>
+    </div>
+
+    <section class="reputation">
+      <div class="reputation-head">
+        <h3>${escapeHtml(t.factionReputationTitle)}</h3>
+        <span class="meta-date">${escapeHtml(savedAtText)}</span>
+      </div>
+      <div class="rep-grid">
+        <div>
+          ${factionRowsMarkup}
+        </div>
+        <div class="stack">
+          <p class="pair-label"><strong>${escapeHtml(t.factionsHelpedLabel)}</strong>${normalizeListText(
+            background?.factionsHelped
+          )}</p>
+          <p class="pair-label"><strong>${escapeHtml(t.factionsHarmedLabel)}</strong>${normalizeListText(
+            background?.factionsHarmed
+          )}</p>
+          <p class="pair-label"><strong>${escapeHtml(t.badFameLabel)}</strong>${escapeHtml(
+            t.reputationHint
+          )}</p>
+        </div>
+      </div>
+    </section>
+  </div>
+
+</body>
+</html>`;
+};
+
 const emptyBackgroundDraft = {
   name: "",
   animalType: "",
@@ -515,7 +1428,6 @@ export default function App() {
     parseJsonStorage(CHARACTER_PROFILE_STORAGE_KEY, null)
   );
   const [saveNotice, setSaveNotice] = useState("");
-  const [shouldPrintProfile, setShouldPrintProfile] = useState(false);
   const [isConnectionHelpOpen, setIsConnectionHelpOpen] = useState(false);
 
   const [characterState, setCharacterState] = useState(() => {
@@ -659,15 +1571,9 @@ export default function App() {
   }, [saveNotice]);
 
   useEffect(() => {
-    if (activeStep !== "profile" || !shouldPrintProfile) return undefined;
-
-    const timeoutId = window.setTimeout(() => {
-      window.print();
-      setShouldPrintProfile(false);
-    }, 260);
-
-    return () => window.clearTimeout(timeoutId);
-  }, [activeStep, shouldPrintProfile]);
+    if (activeStep !== "background") return;
+    window.scrollTo({ top: 0, left: 0, behavior: "auto" });
+  }, [activeStep]);
 
   useEffect(() => {
     if (!isConnectionHelpOpen) return undefined;
@@ -853,6 +1759,10 @@ export default function App() {
   };
 
   const displayPlaybookName = i18n.playbookName;
+  const signatureFontByPlaybook = useMemo(() => buildArchetypeSignatureFontMap(playbooks), []);
+  const signatureDescriptionFontFamily =
+    signatureFontByPlaybook[playbook.name] ||
+    '"Noto Serif", Georgia, serif';
 
   const displayDescription = (pb) => i18n.playbookDescription(pb);
 
@@ -1355,11 +2265,9 @@ export default function App() {
   const requiredBackgroundChecks = [
     backgroundDraft.name.trim().length > 0,
     backgroundDraft.animalType.trim().length > 0,
+    backgroundDraft.appearance.trim().length > 0,
     backgroundDraft.biography.trim().length > 0,
-    backgroundDraft.motives.length === MAX_MOTIVES,
-    backgroundDraft.connections.every(
-      (connection) => connection.role.trim().length > 0 && connection.characterName.trim().length > 0
-    )
+    backgroundDraft.motives.length === MAX_MOTIVES
   ];
   const backgroundCompletedCount = requiredBackgroundChecks.filter(Boolean).length;
   const backgroundProgressPercent = Math.round(
@@ -1404,6 +2312,128 @@ export default function App() {
     setIsConnectionHelpOpen(false);
   };
 
+  const runPrintWhenReady = (targetWindow, onAfterPrint) => {
+    let hasPrinted = false;
+
+    const triggerPrint = () => {
+      if (hasPrinted) return;
+      hasPrinted = true;
+      try {
+        if (onAfterPrint) {
+          targetWindow.addEventListener("afterprint", onAfterPrint, { once: true });
+        }
+      } catch {
+        // Ignore event attachment failures in restricted contexts.
+      }
+      targetWindow.focus();
+      targetWindow.print();
+    };
+
+    const waitForImages = () => {
+      const images = Array.from(targetWindow.document.images || []);
+      const pending = images.filter((img) => !img.complete);
+
+      if (pending.length === 0) {
+        window.setTimeout(triggerPrint, 80);
+        return;
+      }
+
+      let settled = false;
+      const finish = () => {
+        if (settled) return;
+        settled = true;
+        window.setTimeout(triggerPrint, 80);
+      };
+
+      pending.forEach((img) => {
+        img.addEventListener("load", finish, { once: true });
+        img.addEventListener("error", finish, { once: true });
+      });
+
+      window.setTimeout(finish, 1500);
+    };
+
+    const waitForReadyState = () => {
+      if (targetWindow.document.readyState === "complete") {
+        waitForImages();
+        return;
+      }
+      window.setTimeout(waitForReadyState, 40);
+    };
+
+    waitForReadyState();
+  };
+
+  const printHtmlInHiddenFrame = (htmlContent) => {
+    const iframe = document.createElement("iframe");
+    iframe.setAttribute("aria-hidden", "true");
+    iframe.style.position = "fixed";
+    iframe.style.width = "1px";
+    iframe.style.height = "1px";
+    iframe.style.right = "0";
+    iframe.style.bottom = "0";
+    iframe.style.opacity = "0";
+    iframe.style.pointerEvents = "none";
+
+    document.body.appendChild(iframe);
+
+    const frameDoc = iframe.contentWindow?.document;
+    if (!frameDoc) {
+      iframe.remove();
+      return false;
+    }
+
+    frameDoc.open();
+    frameDoc.write(htmlContent);
+    frameDoc.close();
+
+    runPrintWhenReady(iframe.contentWindow, () => {
+      iframe.remove();
+    });
+
+    window.setTimeout(() => {
+      iframe.remove();
+    }, 60000);
+
+    return true;
+  };
+
+  const openPrintWindowWithHtml = (htmlContent) => {
+    const printWindow = window.open("", "_blank", "width=1080,height=1400");
+    if (!printWindow) {
+      const shouldFallback = window.confirm(t.pdfPopupFallbackPrompt);
+      if (!shouldFallback) return false;
+
+      const fallbackStarted = printHtmlInHiddenFrame(htmlContent);
+      if (!fallbackStarted) {
+        window.alert(t.pdfInlineFallbackFailed);
+      }
+      return fallbackStarted;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(htmlContent);
+    printWindow.document.close();
+
+    runPrintWhenReady(printWindow, () => {
+      try {
+        printWindow.close();
+      } catch {
+        // Ignore close failures.
+      }
+    });
+    return true;
+  };
+
+  const handleExportCharacterSheetPdf = (profilePayload, { askPermission = true } = {}) => {
+    if (askPermission) {
+      const hasPermission = window.confirm(t.exportPdfPermissionPrompt);
+      if (!hasPermission) return false;
+    }
+
+    return openPrintWindowWithHtml(buildFilledCharacterSheetHtml(profilePayload));
+  };
+
   const handleExportToPdf = () => {
     if (!isBackgroundComplete) {
       window.alert(t.fillRequiredBeforeExport);
@@ -1411,10 +2441,18 @@ export default function App() {
     }
 
     const savedDraft = persistBackgroundDraft(backgroundDraft);
-    persistProfile(buildProfilePayload(savedDraft));
+    const profilePayload = buildProfilePayload(savedDraft);
+    persistProfile(profilePayload);
+    const started = handleExportCharacterSheetPdf(profilePayload, { askPermission: true });
+    if (!started) return;
     setActiveStep("profile");
-    setShouldPrintProfile(true);
     setIsConnectionHelpOpen(false);
+  };
+
+  const handleExportBlankSheetPdf = () => {
+    const hasPermission = window.confirm(t.exportPdfPermissionPrompt);
+    if (!hasPermission) return;
+    openPrintWindowWithHtml(buildBlankCharacterSheetHtml(language));
   };
 
   const openBackgroundFromProfile = () => {
@@ -1450,24 +2488,31 @@ export default function App() {
 
         <main className="relative p-3 sm:p-4 md:p-6 lg:p-8">
           <div className="max-w-7xl mx-auto space-y-6 pb-10">
-            <section className="bg-white rounded-2xl border border-stone-300 p-4 md:p-5 shadow-sm">
+            <section className="bg-white/95 rounded-2xl border border-stone-300 p-4 md:p-5 shadow-sm backdrop-blur-[1px]">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div className="min-w-0">
-                  <h2 className="text-2xl md:text-3xl font-display font-bold text-stone-950 truncate">
+                  <h2 className="text-2xl md:text-3xl font-display font-bold text-stone-950 uppercase tracking-wide truncate">
                     {displayPlaybookName(playbook.name)}
                   </h2>
                   {currentState.nature && (
-                    <p className="text-sm text-stone-700 mt-1">{displayNatureName(currentState.nature)}</p>
+                    <p className="text-sm text-stone-700 mt-1 font-semibold">{displayNatureName(currentState.nature)}</p>
                   )}
                 </div>
 
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <div className="flex flex-wrap items-center gap-2 flex-shrink-0">
+                  <button
+                    type="button"
+                    onClick={handleBackToBuilder}
+                    className="px-3 py-1.5 rounded-lg bg-stone-700 hover:bg-stone-800 text-white text-xs font-semibold transition-colors"
+                  >
+                    {t.backToBuilder}
+                  </button>
                   <span className="hidden sm:inline text-xs text-stone-600">{t.language}</span>
                   <div className="flex rounded-lg border border-stone-300 overflow-hidden bg-white">
                     <button
                       onClick={() => setLanguage("ru")}
                       className={`px-2.5 py-1.5 text-xs font-semibold ${
-                        language === "ru" ? "bg-amber-700 text-white" : "bg-white text-stone-700"
+                        language === "ru" ? "bg-stone-900 text-white" : "bg-white text-stone-700"
                       }`}
                     >
                       <Languages size={14} className="inline mr-1" /> {t.langRuShort}
@@ -1475,7 +2520,7 @@ export default function App() {
                     <button
                       onClick={() => setLanguage("en")}
                       className={`px-2.5 py-1.5 text-xs font-semibold ${
-                        language === "en" ? "bg-amber-700 text-white" : "bg-white text-stone-700"
+                        language === "en" ? "bg-stone-900 text-white" : "bg-white text-stone-700"
                       }`}
                     >
                       {t.langEnShort}
@@ -1489,18 +2534,18 @@ export default function App() {
                   <span className="text-xs uppercase tracking-wider text-stone-600">{t.progressLabel}</span>
                   <span className="text-xs font-semibold text-stone-900">{backgroundProgressPercent}%</span>
                 </div>
-                <div className="h-2 w-full rounded-full bg-stone-200 overflow-hidden">
+                <div className="h-2.5 w-full rounded-full bg-stone-200 overflow-hidden">
                   <div
-                    className="h-full bg-amber-500 transition-all duration-300"
+                    className="h-full bg-gradient-to-r from-amber-500 to-emerald-500 transition-all duration-300"
                     style={{ width: `${backgroundProgressPercent}%` }}
                   />
                 </div>
               </div>
             </section>
 
-            <div className="grid lg:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)] gap-5 items-start">
-              <aside className="bg-white rounded-2xl border border-stone-300 p-4 space-y-4 shadow-sm">
-                <div className="relative w-full aspect-[3/4] rounded-2xl overflow-hidden">
+            <div className="grid lg:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)] gap-6 items-start">
+              <aside className="bg-white/95 rounded-2xl border border-stone-300 p-4 space-y-4 shadow-sm">
+                <div className="relative w-full aspect-[3/4] rounded-2xl overflow-hidden ring-1 ring-stone-300 shadow-inner">
                   {activeBackground && (
                     <ProgressiveImage
                       src={activeBackground.url}
@@ -1526,7 +2571,7 @@ export default function App() {
                       />
                     </div>
                   ) : (
-                    <label className="absolute inset-0 z-10 cursor-pointer flex flex-col items-center justify-center text-stone-700 hover:text-amber-700 transition-colors">
+                    <label className="absolute inset-0 z-10 cursor-pointer flex flex-col items-center justify-center text-stone-700 hover:text-amber-700 transition-colors bg-stone-100/40 hover:bg-amber-50/60">
                       <ImagePlus size={42} className="mb-3 opacity-80" />
                       <span className="text-[11px] font-bold text-center px-3 uppercase tracking-widest text-stone-700">
                         {t.uploadPortrait}
@@ -1591,29 +2636,31 @@ export default function App() {
                   {activeBackground ? t.bgSelected(selectedBgIndex, totalBackgrounds) : t.bgNoSelection}
                 </p>
 
-                <label className="block w-full">
-                  <span className="sr-only">{t.uploadPortrait}</span>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleImageUpload}
-                  />
-                  <span className="block w-full text-center px-3 py-2.5 rounded-xl bg-stone-700 hover:bg-stone-800 text-white text-sm font-semibold cursor-pointer transition-colors">
-                    <ImagePlus size={14} className="inline mr-1" />
-                    {t.uploadPortrait}
-                  </span>
-                </label>
+                <div className={`grid gap-2 ${portraitToDisplay ? "grid-cols-2" : "grid-cols-1"}`}>
+                  <label className="block w-full">
+                    <span className="sr-only">{t.uploadPortrait}</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={handleImageUpload}
+                    />
+                    <span className="block w-full text-center px-3 py-2.5 rounded-xl bg-stone-700 hover:bg-stone-800 text-white text-sm font-semibold cursor-pointer transition-colors">
+                      <ImagePlus size={14} className="inline mr-1" />
+                      {t.uploadPortrait}
+                    </span>
+                  </label>
 
-                {portraitToDisplay && (
-                  <button
-                    onClick={handleRemovePortrait}
-                    className="w-full px-3 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors"
-                  >
-                    <Trash2 size={14} className="inline mr-1" />
-                    {t.removePortrait}
-                  </button>
-                )}
+                  {portraitToDisplay && (
+                    <button
+                      onClick={handleRemovePortrait}
+                      className="w-full px-3 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors"
+                    >
+                      <Trash2 size={14} className="inline mr-1" />
+                      {t.removePortrait}
+                    </button>
+                  )}
+                </div>
 
                 {!portraitToDisplay && defaultPortrait && (
                   <button
@@ -1642,23 +2689,39 @@ export default function App() {
                   <button
                     type="button"
                     onClick={handleExportToPdf}
-                    className="w-full px-4 py-2.5 rounded-xl bg-stone-700 text-white hover:bg-stone-800 text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
+                    className="w-full px-4 py-2.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
                   >
                     <FileDown size={18} /> {t.exportPdf}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportBlankSheetPdf}
+                    className="w-full px-4 py-2.5 rounded-xl border border-emerald-600 text-emerald-700 hover:bg-emerald-50 text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <FileDown size={18} /> {t.exportBlankPdf}
                   </button>
                   {saveNotice && <span className="block text-center text-sm text-emerald-700">{saveNotice}</span>}
                 </div>
               </aside>
 
-              <section className="bg-white rounded-2xl border border-stone-300 p-4 md:p-5 space-y-4 shadow-sm">
-                <div className="grid sm:grid-cols-2 gap-3">
+              <section className="bg-white/95 rounded-2xl border border-stone-300 p-4 md:p-6 space-y-5 shadow-sm min-w-0">
+                <div className="flex items-center justify-between border-b-2 border-amber-600 pb-2">
+                  <h3 className="text-xl font-display font-bold text-stone-900 uppercase tracking-wide">
+                    {t.profileSectionBackground}
+                  </h3>
+                  <span className="text-xs font-semibold bg-amber-100 text-amber-900 px-3 py-1 rounded-full">
+                    {backgroundProgressPercent}%
+                  </span>
+                </div>
+
+                <div className="grid sm:grid-cols-2 gap-3 rounded-xl border border-stone-300 bg-stone-50/70 p-3 md:p-4">
                   <label className="block">
                     <span className="block text-sm font-semibold text-stone-700 mb-1">{t.nameLabel}</span>
                     <input
                       type="text"
                       value={backgroundDraft.name}
                       onChange={(event) => updateBackgroundField("name", event.target.value)}
-                      className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900"
+                      className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500"
                     />
                   </label>
 
@@ -1670,23 +2733,23 @@ export default function App() {
                       type="text"
                       value={backgroundDraft.animalType}
                       onChange={(event) => updateBackgroundField("animalType", event.target.value)}
-                      className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900"
+                      className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500"
                     />
                   </label>
                 </div>
 
-                <label className="block">
+                <label className="block rounded-xl border border-stone-300 bg-stone-50/70 p-3 md:p-4">
                   <span className="block text-sm font-semibold text-stone-700 mb-1">{t.biographyLabel}</span>
                   <textarea
                     value={backgroundDraft.biography}
                     onChange={(event) => updateBackgroundField("biography", event.target.value)}
                     placeholder={t.biographyPlaceholder}
                     rows={4}
-                    className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900 resize-y"
+                    className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900 placeholder:text-stone-500 resize-y transition-colors focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500"
                   />
                 </label>
 
-                <label className="block">
+                <label className="block rounded-xl border border-stone-300 bg-stone-50/70 p-3 md:p-4">
                   <span className="block text-sm font-semibold text-stone-700 mb-1">
                     {t.appearanceLabel}
                   </span>
@@ -1694,11 +2757,11 @@ export default function App() {
                     type="text"
                     value={backgroundDraft.appearance}
                     onChange={(event) => updateBackgroundField("appearance", event.target.value)}
-                    className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900"
+                    className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500"
                   />
                 </label>
 
-                <div>
+                <div className="rounded-xl border border-stone-300 bg-stone-50/70 p-3 md:p-4">
                   <div className="flex flex-wrap items-center gap-2 mb-2">
                     <span className="text-sm font-semibold text-stone-700">{t.motivesLabel}</span>
                     <span className="text-xs text-stone-700">{t.motivesHint}</span>
@@ -1711,10 +2774,10 @@ export default function App() {
                           type="button"
                           key={motive}
                           onClick={() => toggleBackgroundPick("motives", motive, MAX_MOTIVES)}
-                          className={`px-3 py-2 rounded-full text-sm font-semibold transition-colors ${
+                          className={`px-3 py-2 rounded-full border text-sm font-semibold transition-colors ${
                             isSelected
-                              ? "bg-amber-500 text-stone-950"
-                              : "bg-stone-200 text-stone-800 hover:bg-stone-300"
+                              ? "bg-amber-100 border-amber-500 text-amber-900 ring-1 ring-amber-300"
+                              : "bg-white border-stone-300 text-stone-800 hover:bg-stone-100"
                           }`}
                         >
                           {motive}
@@ -1724,7 +2787,7 @@ export default function App() {
                   </div>
                 </div>
 
-                <div className="rounded-xl border border-stone-300 p-3 bg-white space-y-3">
+                <div className="rounded-xl border border-stone-300 p-3 bg-stone-50/70 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div>
                       <span className="text-sm font-semibold text-stone-700">{t.otherMotivesLabel}</span>
@@ -1743,7 +2806,7 @@ export default function App() {
                   {backgroundDraft.customMotives.length > 0 && (
                     <div className="space-y-3">
                       {backgroundDraft.customMotives.map((motive, motiveIndex) => (
-                        <div key={motiveIndex} className="rounded-xl border border-stone-200 p-3 bg-stone-50">
+                        <div key={motiveIndex} className="rounded-xl border border-stone-300 p-3 bg-white">
                           <div className="flex items-center justify-between gap-2 mb-2">
                             <span className="text-xs font-semibold text-stone-700">#{motiveIndex + 1}</span>
                             <button
@@ -1764,7 +2827,7 @@ export default function App() {
                                 onChange={(event) =>
                                   updateCustomMotiveField(motiveIndex, "title", event.target.value)
                                 }
-                                className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900"
+                                className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900 placeholder:text-stone-500 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500"
                               />
                             </label>
                             <label className="block">
@@ -1776,7 +2839,7 @@ export default function App() {
                                   updateCustomMotiveField(motiveIndex, "description", event.target.value)
                                 }
                                 rows={2}
-                                className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900 resize-y"
+                                className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900 placeholder:text-stone-500 resize-y transition-colors focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500"
                               />
                             </label>
                           </div>
@@ -1786,7 +2849,7 @@ export default function App() {
                   )}
                 </div>
 
-                <div className="space-y-3">
+                <div className="space-y-3 rounded-xl border border-stone-300 bg-stone-50/70 p-3 md:p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-sm font-semibold text-stone-700">{t.connectionsLabel}</span>
                     <button
@@ -1800,7 +2863,7 @@ export default function App() {
                   </div>
 
                   {backgroundDraft.connections.map((connection, index) => (
-                    <div key={index} className="rounded-xl border border-stone-300 p-3 bg-white">
+                    <div key={index} className="rounded-xl border border-stone-300 p-3 bg-white shadow-[0_1px_0_rgba(0,0,0,0.03)]">
                       <p className="text-[11px] uppercase tracking-wider text-stone-600 mb-2">
                         {index === 0 ? t.connectionOneLabel : t.connectionTwoLabel}
                       </p>
@@ -1810,7 +2873,7 @@ export default function App() {
                           <select
                             value={connection.role}
                             onChange={(event) => updateConnectionField(index, "role", event.target.value)}
-                            className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900"
+                            className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500"
                           >
                             <option value="">-</option>
                             {storyOptions.connectionRoles.map((role) => (
@@ -1830,7 +2893,7 @@ export default function App() {
                             onChange={(event) =>
                               updateConnectionField(index, "characterName", event.target.value)
                             }
-                            className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900"
+                            className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900 placeholder:text-stone-500 transition-colors focus:outline-none focus:ring-2 focus:ring-amber-200 focus:border-amber-500"
                           />
                         </label>
                       </div>
@@ -1838,7 +2901,7 @@ export default function App() {
                   ))}
                 </div>
 
-                <div className="rounded-xl border border-stone-300 p-3 bg-white space-y-3">
+                <div className="rounded-xl border border-stone-300 p-3 bg-stone-50/70 space-y-3">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <span className="text-sm font-semibold text-stone-700">
                       {t.factionReputationTitle}
@@ -1896,7 +2959,7 @@ export default function App() {
                                   type="button"
                                   onClick={() => setFactionReputation(factionIndex, value)}
                                   className={`h-8 rounded-md border text-xs font-bold transition-colors ${
-                                    isActive ? activeClass : `${baseClass} bg-white hover:bg-stone-100`
+                                    isActive ? `${activeClass} shadow-sm` : `${baseClass} bg-white hover:bg-stone-100`
                                   }`}
                                 >
                                   {value > 0 ? `+${value}` : value}
@@ -1938,9 +3001,16 @@ export default function App() {
                   <button
                     type="button"
                     onClick={handleExportToPdf}
-                    className="w-full px-4 py-2.5 rounded-xl bg-stone-700 text-white hover:bg-stone-800 text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
+                    className="w-full px-4 py-2.5 rounded-xl bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
                   >
                     <FileDown size={18} /> {t.exportPdf}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportBlankSheetPdf}
+                    className="w-full px-4 py-2.5 rounded-xl border border-emerald-600 text-emerald-700 hover:bg-emerald-50 text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <FileDown size={18} /> {t.exportBlankPdf}
                   </button>
                   {saveNotice && <span className="block text-center text-sm text-emerald-700">{saveNotice}</span>}
                 </div>
@@ -2037,10 +3107,17 @@ export default function App() {
                 </button>
                 <button
                   type="button"
-                  onClick={() => window.print()}
-                  className="px-3 py-2 rounded-lg bg-amber-500 text-stone-950 hover:bg-amber-400 text-sm font-semibold flex items-center gap-2"
+                  onClick={() => handleExportCharacterSheetPdf(profile)}
+                  className="px-3 py-2 rounded-lg bg-emerald-600 text-white hover:bg-emerald-700 text-sm font-semibold flex items-center gap-2"
                 >
                   <FileDown size={16} /> {t.exportPdf}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleExportBlankSheetPdf}
+                  className="px-3 py-2 rounded-lg border border-emerald-600 text-emerald-700 hover:bg-emerald-50 text-sm font-semibold flex items-center gap-2"
+                >
+                  <FileDown size={16} /> {t.exportBlankPdf}
                 </button>
               </div>
             </header>
@@ -2412,7 +3489,12 @@ export default function App() {
 
               <div className="w-full lg:w-2/3 flex flex-col gap-6 min-w-0">
                 <div className="bg-white/95 p-5 md:p-6 rounded-2xl shadow-sm border border-stone-300">
-                  <p className="text-base md:text-lg text-stone-900 leading-7">{displayDescription(playbook)}</p>
+                  <p
+                    className="text-base md:text-lg text-stone-900 leading-7 font-bold"
+                    style={{ fontFamily: signatureDescriptionFontFamily }}
+                  >
+                    {displayDescription(playbook)}
+                  </p>
                 </div>
 
                 <div className="flex-1 flex flex-col min-w-0">
@@ -2711,7 +3793,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={openBackgroundStep}
-                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-base font-display font-bold tracking-wide shadow-sm transition-colors"
+                  className="w-full sm:w-auto px-8 py-4 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-lg font-display font-bold tracking-wide shadow-sm transition-colors"
                 >
                   {t.goToBackgroundPage}
                 </button>
