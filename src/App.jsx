@@ -16,16 +16,23 @@ import {
   Sparkles,
   ChevronLeft,
   ChevronRight,
-  RotateCcw
+  RotateCcw,
+  FileDown,
+  Save,
+  Info
 } from "lucide-react";
 import { allFeats, allSkills, playbooks } from "./data/playbooks";
-import { playbookNameEn } from "./content/localizationData";
+import localizationData, { playbookNameEn } from "./content/localizationData";
 import { getLocalizer } from "./i18n/localization";
 import frameSvg from "../frame.svg";
 
 const STORAGE_KEY = "root-playbook-state-v5";
 const LANGUAGE_KEY = "root-playbook-lang-v1";
 const BG_STORAGE_KEY = "root-bg-index-v1";
+const BACKGROUND_DRAFT_STORAGE_KEY = "root-character-background-draft-v1";
+const CHARACTER_PROFILE_STORAGE_KEY = "root-character-profile-v1";
+const MAX_MOTIVES = 2;
+const MAX_CUSTOM_MOTIVES = 2;
 const statsOrder = ["Шарм", "Хитрость", "Сноровка", "Удача", "Мощь"];
 
 const FEAT_RULES = {
@@ -129,6 +136,58 @@ const optimizedBackgroundLowModules = import.meta.glob("../assets-optimized/back
 const unique = (arr) => Array.from(new Set(arr));
 const clamp = (value, min, max) => Math.max(min, Math.min(max, value));
 const PORTRAIT_MASS_CACHE = new Map();
+const REPUTATION_VALUES = [-3, -2, -1, 0, 1, 2, 3];
+const FACTION_TRACK_LENGTH = Math.max(
+  localizationData.characterStoryOptions?.ru?.factions?.length || 0,
+  localizationData.characterStoryOptions?.en?.factions?.length || 0
+);
+const INITIAL_VISIBLE_FACTIONS = Math.min(3, FACTION_TRACK_LENGTH);
+const FACTION_LABELS_BY_INDEX = Array.from({ length: FACTION_TRACK_LENGTH }, (_, idx) =>
+  [
+    localizationData.characterStoryOptions?.ru?.factions?.[idx],
+    localizationData.characterStoryOptions?.en?.factions?.[idx]
+  ].filter(Boolean)
+);
+
+const clampReputation = (value) => {
+  const numeric = Number(value);
+  if (!Number.isFinite(numeric)) return 0;
+  return Math.max(-3, Math.min(3, Math.trunc(numeric)));
+};
+
+const createDefaultFactionReputation = () =>
+  Array.from({ length: FACTION_TRACK_LENGTH }, () => 0);
+
+const sanitizeVisibleFactionCount = (rawValue) => {
+  const numeric = Number(rawValue);
+  if (!Number.isFinite(numeric)) return INITIAL_VISIBLE_FACTIONS;
+  return clamp(Math.trunc(numeric), INITIAL_VISIBLE_FACTIONS, FACTION_TRACK_LENGTH);
+};
+
+const sanitizeFactionReputation = (rawValue, legacyHelped = [], legacyHarmed = []) => {
+  const reputation = createDefaultFactionReputation();
+
+  if (Array.isArray(rawValue)) {
+    for (let idx = 0; idx < FACTION_TRACK_LENGTH; idx += 1) {
+      reputation[idx] = clampReputation(rawValue[idx]);
+    }
+    return reputation;
+  }
+
+  const helpedSet = new Set(legacyHelped);
+  const harmedSet = new Set(legacyHarmed);
+
+  for (let idx = 0; idx < FACTION_TRACK_LENGTH; idx += 1) {
+    const labels = FACTION_LABELS_BY_INDEX[idx] || [];
+    const hasHelped = labels.some((label) => helpedSet.has(label));
+    const hasHarmed = labels.some((label) => harmedSet.has(label));
+
+    if (hasHelped && !hasHarmed) reputation[idx] = 1;
+    if (hasHarmed && !hasHelped) reputation[idx] = -1;
+  }
+
+  return reputation;
+};
 
 const analyzePortraitMassOffset = (imageUrl) =>
   new Promise((resolve) => {
@@ -355,6 +414,81 @@ const parseBgIndex = (value) => {
   return Number.isInteger(index) ? index : -1;
 };
 
+const emptyBackgroundDraft = {
+  name: "",
+  animalType: "",
+  appearance: "",
+  biography: "",
+  motives: [],
+  customMotives: [],
+  connections: [
+    { role: "", characterName: "" },
+    { role: "", characterName: "" }
+  ],
+  visibleFactionCount: INITIAL_VISIBLE_FACTIONS,
+  factionReputation: createDefaultFactionReputation()
+};
+
+const parseJsonStorage = (key, fallback) => {
+  try {
+    const raw = localStorage.getItem(key);
+    if (!raw) return fallback;
+    return JSON.parse(raw);
+  } catch {
+    return fallback;
+  }
+};
+
+const sanitizeBackgroundDraft = (rawDraft) => {
+  const draft = rawDraft && typeof rawDraft === "object" ? rawDraft : {};
+  const legacyHelped = Array.isArray(draft.factionsHelped)
+    ? unique(draft.factionsHelped.map(String))
+    : [];
+  const legacyHarmed = Array.isArray(draft.factionsHarmed)
+    ? unique(draft.factionsHarmed.map(String))
+    : [];
+  const rawConnections = Array.isArray(draft.connections) ? draft.connections : [];
+  const rawCustomMotives = Array.isArray(draft.customMotives) ? draft.customMotives : [];
+  const normalizedConnections = [0, 1].map((idx) => {
+    const item = rawConnections[idx] && typeof rawConnections[idx] === "object" ? rawConnections[idx] : {};
+    return {
+      role: typeof item.role === "string" ? item.role : "",
+      characterName: typeof item.characterName === "string" ? item.characterName : ""
+    };
+  });
+  const customMotives = rawCustomMotives
+    .map((item) => ({
+      title: typeof item?.title === "string" ? item.title : "",
+      description: typeof item?.description === "string" ? item.description : ""
+    }))
+    .slice(0, MAX_CUSTOM_MOTIVES);
+  const factionReputation = sanitizeFactionReputation(
+    draft.factionReputation,
+    legacyHelped,
+    legacyHarmed
+  );
+  const highestUsedFactionIndex = factionReputation.reduce(
+    (maxIndex, value, index) => (clampReputation(value) !== 0 ? index : maxIndex),
+    -1
+  );
+  const visibleFactionCount = Math.max(
+    sanitizeVisibleFactionCount(draft.visibleFactionCount),
+    highestUsedFactionIndex + 1
+  );
+
+  return {
+    name: typeof draft.name === "string" ? draft.name : "",
+    animalType: typeof draft.animalType === "string" ? draft.animalType : "",
+    appearance: typeof draft.appearance === "string" ? draft.appearance : "",
+    biography: typeof draft.biography === "string" ? draft.biography : "",
+    motives: Array.isArray(draft.motives) ? unique(draft.motives.map(String)).slice(0, MAX_MOTIVES) : [],
+    customMotives,
+    connections: normalizedConnections,
+    visibleFactionCount,
+    factionReputation
+  };
+};
+
 export default function App() {
   const [selectedIdx, setSelectedIdx] = useState(() => {
     const adventurerIndex = playbooks.findIndex((pb) => pb.name === "Авантюрист");
@@ -369,6 +503,20 @@ export default function App() {
   const [frameInnerMaskUrl, setFrameInnerMaskUrl] = useState("");
   const [frameMaskHasOpening, setFrameMaskHasOpening] = useState(false);
   const [portraitMassOffset, setPortraitMassOffset] = useState({ x: 0, y: 0 });
+  const [activeMoveName, setActiveMoveName] = useState(null);
+  const [activeStep, setActiveStep] = useState("builder");
+  const [backgroundDraft, setBackgroundDraft] = useState(() =>
+    sanitizeBackgroundDraft(parseJsonStorage(BACKGROUND_DRAFT_STORAGE_KEY, emptyBackgroundDraft))
+  );
+  const [draftSnapshotOnOpen, setDraftSnapshotOnOpen] = useState(() =>
+    sanitizeBackgroundDraft(parseJsonStorage(BACKGROUND_DRAFT_STORAGE_KEY, emptyBackgroundDraft))
+  );
+  const [savedCharacterProfile, setSavedCharacterProfile] = useState(() =>
+    parseJsonStorage(CHARACTER_PROFILE_STORAGE_KEY, null)
+  );
+  const [saveNotice, setSaveNotice] = useState("");
+  const [shouldPrintProfile, setShouldPrintProfile] = useState(false);
+  const [isConnectionHelpOpen, setIsConnectionHelpOpen] = useState(false);
 
   const [characterState, setCharacterState] = useState(() => {
     try {
@@ -498,8 +646,39 @@ export default function App() {
 
   const i18n = useMemo(() => getLocalizer(language), [language]);
   const { t } = i18n;
+  const storyOptions =
+    localizationData.characterStoryOptions[language] || localizationData.characterStoryOptions.en;
+  const connectionRules = localizationData.connectionRules[language] || localizationData.connectionRules.en;
   const coreStartIndex = playbooks.findIndex((pb) => pb.name === "Авантюрист");
   const totalBackgrounds = ROOT_BACKGROUNDS.length;
+
+  useEffect(() => {
+    if (!saveNotice) return undefined;
+    const timeoutId = window.setTimeout(() => setSaveNotice(""), 2200);
+    return () => window.clearTimeout(timeoutId);
+  }, [saveNotice]);
+
+  useEffect(() => {
+    if (activeStep !== "profile" || !shouldPrintProfile) return undefined;
+
+    const timeoutId = window.setTimeout(() => {
+      window.print();
+      setShouldPrintProfile(false);
+    }, 260);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [activeStep, shouldPrintProfile]);
+
+  useEffect(() => {
+    if (!isConnectionHelpOpen) return undefined;
+
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+
+    return () => {
+      document.body.style.overflow = previousOverflow;
+    };
+  }, [isConnectionHelpOpen]);
 
   const groupedPlaybooks = useMemo(() => {
     if (coreStartIndex <= 0) {
@@ -533,6 +712,21 @@ export default function App() {
   const fixedFeats = getFixedFeats(playbook, featRule);
   const optionalFeatsCount = currentState.feats.filter((feat) => !fixedFeats.includes(feat)).length;
   const hasReachedFeatLimit = optionalFeatsCount >= featRule.count;
+
+  useEffect(() => {
+    if (playbook.moves.some((move) => move.name === activeMoveName)) {
+      return;
+    }
+
+    const preferredMoveName =
+      playbook.startingMoves.find((name) => playbook.moves.some((move) => move.name === name)) ||
+      playbook.moves[0]?.name ||
+      null;
+
+    if (preferredMoveName !== activeMoveName) {
+      setActiveMoveName(preferredMoveName);
+    }
+  }, [activeMoveName, playbook]);
 
   const defaultPortraitAsset = DEFAULT_PORTRAITS[playbook.name] || null;
   const defaultPortrait = defaultPortraitAsset?.url || null;
@@ -1014,6 +1208,974 @@ export default function App() {
     (m) => !playbook.startingMoves.includes(m)
   ).length;
   const hasReachedMoveLimit = selectedOptionalMovesCount >= playbook.movesCheck;
+  const activeMove = playbook.moves.find((move) => move.name === activeMoveName) || playbook.moves[0] || null;
+
+  const requiredOptionalFeatCount = featRule.mode === "fixed" ? 0 : featRule.count;
+  const selectedRequiredFeatsCount =
+    featRule.mode === "fixed-plus-any" ? optionalFeatsCount : featRule.mode === "any" ? currentState.feats.length : 0;
+
+  const isBuilderReady =
+    Boolean(currentState.nature) &&
+    Boolean(currentState.bonusStat) &&
+    currentState.skills.length === 1 &&
+    selectedOptionalMovesCount === playbook.movesCheck &&
+    selectedRequiredFeatsCount === requiredOptionalFeatCount;
+
+  const bgBackdropUrl = activeBackground?.url || activeBackground?.lowUrl || "";
+
+  const updateBackgroundField = (field, value) => {
+    setBackgroundDraft((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const toggleBackgroundPick = (field, value, maxCount = Number.POSITIVE_INFINITY) => {
+    setBackgroundDraft((prev) => {
+      const list = Array.isArray(prev[field]) ? prev[field] : [];
+      const hasValue = list.includes(value);
+
+      if (hasValue) {
+        return { ...prev, [field]: list.filter((item) => item !== value) };
+      }
+
+      if (list.length >= maxCount) {
+        return prev;
+      }
+
+      return { ...prev, [field]: [...list, value] };
+    });
+  };
+
+  const updateConnectionField = (index, field, value) => {
+    setBackgroundDraft((prev) => {
+      const nextConnections = prev.connections.map((connection, connectionIndex) =>
+        connectionIndex === index ? { ...connection, [field]: value } : connection
+      );
+      return { ...prev, connections: nextConnections };
+    });
+  };
+
+  const addCustomMotive = () => {
+    setBackgroundDraft((prev) => {
+      if (prev.customMotives.length >= MAX_CUSTOM_MOTIVES) return prev;
+      return {
+        ...prev,
+        customMotives: [...prev.customMotives, { title: "", description: "" }]
+      };
+    });
+  };
+
+  const updateCustomMotiveField = (index, field, value) => {
+    setBackgroundDraft((prev) => {
+      const nextCustomMotives = prev.customMotives.map((motive, motiveIndex) =>
+        motiveIndex === index ? { ...motive, [field]: value } : motive
+      );
+      return { ...prev, customMotives: nextCustomMotives };
+    });
+  };
+
+  const removeCustomMotive = (index) => {
+    setBackgroundDraft((prev) => ({
+      ...prev,
+      customMotives: prev.customMotives.filter((_, motiveIndex) => motiveIndex !== index)
+    }));
+  };
+
+  const setFactionReputation = (index, nextValue) => {
+    setBackgroundDraft((prev) => {
+      const nextReputation = [...prev.factionReputation];
+      const currentValue = clampReputation(nextReputation[index]);
+      const normalizedNext = clampReputation(nextValue);
+      nextReputation[index] = currentValue === normalizedNext ? 0 : normalizedNext;
+      return {
+        ...prev,
+        factionReputation: nextReputation,
+        visibleFactionCount: Math.max(
+          sanitizeVisibleFactionCount(prev.visibleFactionCount),
+          index + 1
+        )
+      };
+    });
+  };
+
+  const revealNextFaction = () => {
+    setBackgroundDraft((prev) => ({
+      ...prev,
+      visibleFactionCount: clamp(
+        sanitizeVisibleFactionCount(prev.visibleFactionCount) + 1,
+        INITIAL_VISIBLE_FACTIONS,
+        storyOptions.factions.length
+      )
+    }));
+  };
+
+  const persistBackgroundDraft = (nextDraft) => {
+    const sanitized = sanitizeBackgroundDraft(nextDraft);
+    localStorage.setItem(BACKGROUND_DRAFT_STORAGE_KEY, JSON.stringify(sanitized));
+    setBackgroundDraft(sanitized);
+    setDraftSnapshotOnOpen(sanitized);
+    setSaveNotice(t.saveDone);
+    return sanitized;
+  };
+
+  const buildProfilePayload = (nextDraft) => {
+    const normalizedDraft = sanitizeBackgroundDraft(nextDraft);
+    const factionsHelped = storyOptions.factions.filter(
+      (_, idx) => (normalizedDraft.factionReputation[idx] || 0) > 0
+    );
+    const factionsHarmed = storyOptions.factions.filter(
+      (_, idx) => (normalizedDraft.factionReputation[idx] || 0) < 0
+    );
+
+    return {
+      savedAt: new Date().toISOString(),
+      language,
+      playbookName: playbook.name,
+      nature: currentState.nature,
+      stats: statsOrder.map((stat) => ({
+        stat,
+        value: playbook.stats[stat] + (currentState.bonusStat === stat ? 1 : 0)
+      })),
+      feats: [...currentState.feats],
+      skills: [...currentState.skills],
+      moves: [...currentState.moves],
+      portrait: portraitToDisplay || null,
+      backgroundImage: activeBackground?.url || activeBackground?.lowUrl || null,
+      background: {
+        ...normalizedDraft,
+        factionsHelped,
+        factionsHarmed
+      }
+    };
+  };
+
+  const persistProfile = (payload) => {
+    localStorage.setItem(CHARACTER_PROFILE_STORAGE_KEY, JSON.stringify(payload));
+    setSavedCharacterProfile(payload);
+  };
+
+  const requiredBackgroundChecks = [
+    backgroundDraft.name.trim().length > 0,
+    backgroundDraft.animalType.trim().length > 0,
+    backgroundDraft.biography.trim().length > 0,
+    backgroundDraft.motives.length === MAX_MOTIVES,
+    backgroundDraft.connections.every(
+      (connection) => connection.role.trim().length > 0 && connection.characterName.trim().length > 0
+    )
+  ];
+  const backgroundCompletedCount = requiredBackgroundChecks.filter(Boolean).length;
+  const backgroundProgressPercent = Math.round(
+    (backgroundCompletedCount / requiredBackgroundChecks.length) * 100
+  );
+  const isBackgroundComplete = requiredBackgroundChecks.every(Boolean);
+
+  const hasUnsavedBackgroundChanges =
+    JSON.stringify(sanitizeBackgroundDraft(backgroundDraft)) !==
+    JSON.stringify(sanitizeBackgroundDraft(draftSnapshotOnOpen));
+
+  const visibleFactionCount = clamp(
+    sanitizeVisibleFactionCount(backgroundDraft.visibleFactionCount),
+    INITIAL_VISIBLE_FACTIONS,
+    storyOptions.factions.length
+  );
+  const visibleFactions = storyOptions.factions.slice(0, visibleFactionCount);
+  const canRevealMoreFactions = visibleFactionCount < storyOptions.factions.length;
+
+  const openBackgroundStep = () => {
+    if (!isBuilderReady) return;
+    const snapshot = sanitizeBackgroundDraft(backgroundDraft);
+    setDraftSnapshotOnOpen(snapshot);
+    setActiveStep("background");
+    setSidebarOpen(false);
+  };
+
+  const handleBackToBuilder = () => {
+    if (hasUnsavedBackgroundChanges) {
+      const shouldDiscard = window.confirm(t.backToBuilderWarning);
+      if (!shouldDiscard) return;
+      setBackgroundDraft(sanitizeBackgroundDraft(draftSnapshotOnOpen));
+    }
+    setIsConnectionHelpOpen(false);
+    setActiveStep("builder");
+  };
+
+  const handleSaveCharacterAndReturn = () => {
+    const savedDraft = persistBackgroundDraft(backgroundDraft);
+    persistProfile(buildProfilePayload(savedDraft));
+    setActiveStep("builder");
+    setIsConnectionHelpOpen(false);
+  };
+
+  const handleExportToPdf = () => {
+    if (!isBackgroundComplete) {
+      window.alert(t.fillRequiredBeforeExport);
+      return;
+    }
+
+    const savedDraft = persistBackgroundDraft(backgroundDraft);
+    persistProfile(buildProfilePayload(savedDraft));
+    setActiveStep("profile");
+    setShouldPrintProfile(true);
+    setIsConnectionHelpOpen(false);
+  };
+
+  const openBackgroundFromProfile = () => {
+    const snapshot = sanitizeBackgroundDraft(backgroundDraft);
+    setDraftSnapshotOnOpen(snapshot);
+    setIsConnectionHelpOpen(false);
+    setActiveStep("background");
+  };
+
+  const handleClearBackgroundDraft = () => {
+    const clearedDraft = sanitizeBackgroundDraft(emptyBackgroundDraft);
+    setBackgroundDraft(clearedDraft);
+    localStorage.removeItem(BACKGROUND_DRAFT_STORAGE_KEY);
+    setIsConnectionHelpOpen(false);
+    setSaveNotice("");
+  };
+
+  if (activeStep === "background") {
+    return (
+      <div className="min-h-screen bg-stone-100 text-stone-900 font-body relative overflow-x-hidden selection:bg-amber-200">
+        {bgBackdropUrl && (
+          <div className="absolute inset-0 opacity-[0.14] pointer-events-none">
+            <ProgressiveImage
+              src={activeBackground?.url}
+              placeholderSrc={activeBackground?.lowUrl}
+              alt={t.portraitBackgroundAlt}
+              className="w-full h-full"
+              imageClassName="object-cover"
+            />
+          </div>
+        )}
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/aged-paper.png')] opacity-80 pointer-events-none" />
+
+        <main className="relative p-3 sm:p-4 md:p-6 lg:p-8">
+          <div className="max-w-7xl mx-auto space-y-6 pb-10">
+            <section className="bg-white rounded-2xl border border-stone-300 p-4 md:p-5 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="min-w-0">
+                  <h2 className="text-2xl md:text-3xl font-display font-bold text-stone-950 truncate">
+                    {displayPlaybookName(playbook.name)}
+                  </h2>
+                  {currentState.nature && (
+                    <p className="text-sm text-stone-700 mt-1">{displayNatureName(currentState.nature)}</p>
+                  )}
+                </div>
+
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <span className="hidden sm:inline text-xs text-stone-600">{t.language}</span>
+                  <div className="flex rounded-lg border border-stone-300 overflow-hidden bg-white">
+                    <button
+                      onClick={() => setLanguage("ru")}
+                      className={`px-2.5 py-1.5 text-xs font-semibold ${
+                        language === "ru" ? "bg-amber-700 text-white" : "bg-white text-stone-700"
+                      }`}
+                    >
+                      <Languages size={14} className="inline mr-1" /> {t.langRuShort}
+                    </button>
+                    <button
+                      onClick={() => setLanguage("en")}
+                      className={`px-2.5 py-1.5 text-xs font-semibold ${
+                        language === "en" ? "bg-amber-700 text-white" : "bg-white text-stone-700"
+                      }`}
+                    >
+                      {t.langEnShort}
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+                  <span className="text-xs uppercase tracking-wider text-stone-600">{t.progressLabel}</span>
+                  <span className="text-xs font-semibold text-stone-900">{backgroundProgressPercent}%</span>
+                </div>
+                <div className="h-2 w-full rounded-full bg-stone-200 overflow-hidden">
+                  <div
+                    className="h-full bg-amber-500 transition-all duration-300"
+                    style={{ width: `${backgroundProgressPercent}%` }}
+                  />
+                </div>
+              </div>
+            </section>
+
+            <div className="grid lg:grid-cols-[minmax(280px,0.8fr)_minmax(0,1.2fr)] gap-5 items-start">
+              <aside className="bg-white rounded-2xl border border-stone-300 p-4 space-y-4 shadow-sm">
+                <div className="relative w-full aspect-[3/4] rounded-2xl overflow-hidden">
+                  {activeBackground && (
+                    <ProgressiveImage
+                      src={activeBackground.url}
+                      placeholderSrc={activeBackground.lowUrl}
+                      alt={t.portraitBackgroundAlt}
+                      className="absolute inset-0"
+                      imageClassName="object-cover opacity-55"
+                      loading="eager"
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-stone-100/35" />
+
+                  {portraitToDisplay ? (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center">
+                      <img
+                        src={portraitToDisplay}
+                        alt={t.characterPortraitAlt}
+                        className="w-[94%] h-[96%] object-contain"
+                        style={{ transform: `translate(${portraitMassOffset.x}%, ${portraitMassOffset.y}%)` }}
+                        loading="eager"
+                        decoding="async"
+                        fetchPriority="high"
+                      />
+                    </div>
+                  ) : (
+                    <label className="absolute inset-0 z-10 cursor-pointer flex flex-col items-center justify-center text-stone-700 hover:text-amber-700 transition-colors">
+                      <ImagePlus size={42} className="mb-3 opacity-80" />
+                      <span className="text-[11px] font-bold text-center px-3 uppercase tracking-widest text-stone-700">
+                        {t.uploadPortrait}
+                      </span>
+                      <span className="text-[10px] uppercase text-stone-600 mt-1 tracking-wider">
+                        {t.portraitHint}
+                      </span>
+                      <input
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleImageUpload}
+                      />
+                    </label>
+                  )}
+                </div>
+
+                {hasCustomPortraitUpload && (
+                  <button
+                    onClick={canRestoreRemovedBackground ? handleRestoreBackgroundToImage : handleRemoveBackgroundFromImage}
+                    disabled={isRemovingBg}
+                    className={`w-full px-4 py-2.5 rounded-xl text-white text-sm font-semibold disabled:opacity-70 shadow-sm transition-colors ${
+                      canRestoreRemovedBackground
+                        ? "bg-stone-700 hover:bg-stone-800"
+                        : "bg-emerald-600 hover:bg-emerald-700"
+                    }`}
+                  >
+                    {canRestoreRemovedBackground ? (
+                      <RotateCcw size={14} className="inline mr-1" />
+                    ) : (
+                      <Sparkles size={14} className="inline mr-1" />
+                    )}
+                    {canRestoreRemovedBackground ? t.restoreBg : isRemovingBg ? t.removeBgBusy : t.removeBg}
+                  </button>
+                )}
+
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    onClick={handleBackgroundPrev}
+                    className="px-2 py-2.5 rounded-xl bg-stone-700 hover:bg-stone-800 text-white text-sm font-semibold transition-colors"
+                    title={t.bgPrev}
+                  >
+                    <ChevronLeft size={14} className="inline" />
+                  </button>
+                  <button
+                    onClick={handleBackgroundNext}
+                    className="px-2 py-2.5 rounded-xl bg-stone-700 hover:bg-stone-800 text-white text-sm font-semibold transition-colors"
+                    title={t.bgNext}
+                  >
+                    <ChevronRight size={14} className="inline" />
+                  </button>
+                  <button
+                    onClick={clearBackground}
+                    className="px-2 py-2.5 rounded-xl bg-stone-500 hover:bg-stone-600 text-white text-sm font-semibold transition-colors"
+                    title={t.bgClear}
+                  >
+                    <RotateCcw size={14} className="inline" />
+                  </button>
+                </div>
+
+                <p className="text-xs text-stone-600">
+                  {activeBackground ? t.bgSelected(selectedBgIndex, totalBackgrounds) : t.bgNoSelection}
+                </p>
+
+                <label className="block w-full">
+                  <span className="sr-only">{t.uploadPortrait}</span>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageUpload}
+                  />
+                  <span className="block w-full text-center px-3 py-2.5 rounded-xl bg-stone-700 hover:bg-stone-800 text-white text-sm font-semibold cursor-pointer transition-colors">
+                    <ImagePlus size={14} className="inline mr-1" />
+                    {t.uploadPortrait}
+                  </span>
+                </label>
+
+                {portraitToDisplay && (
+                  <button
+                    onClick={handleRemovePortrait}
+                    className="w-full px-3 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-semibold transition-colors"
+                  >
+                    <Trash2 size={14} className="inline mr-1" />
+                    {t.removePortrait}
+                  </button>
+                )}
+
+                {!portraitToDisplay && defaultPortrait && (
+                  <button
+                    onClick={handleRestoreDefaultPortrait}
+                    className="w-full px-3 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-semibold transition-colors"
+                  >
+                    {t.restoreDefaultPortrait}
+                  </button>
+                )}
+
+                <div className="hidden lg:block pt-2 space-y-2 border-t border-stone-200">
+                  <button
+                    type="button"
+                    onClick={handleClearBackgroundDraft}
+                    className="w-full px-4 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 hover:bg-stone-100 text-sm font-semibold transition-colors"
+                  >
+                    {t.clearBackgroundForm}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveCharacterAndReturn}
+                    className="w-full px-4 py-2.5 rounded-xl bg-amber-600 text-white hover:bg-amber-700 text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Save size={18} /> {t.saveCharacterAndReturn}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportToPdf}
+                    className="w-full px-4 py-2.5 rounded-xl bg-stone-700 text-white hover:bg-stone-800 text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <FileDown size={18} /> {t.exportPdf}
+                  </button>
+                  {saveNotice && <span className="block text-center text-sm text-emerald-700">{saveNotice}</span>}
+                </div>
+              </aside>
+
+              <section className="bg-white rounded-2xl border border-stone-300 p-4 md:p-5 space-y-4 shadow-sm">
+                <div className="grid sm:grid-cols-2 gap-3">
+                  <label className="block">
+                    <span className="block text-sm font-semibold text-stone-700 mb-1">{t.nameLabel}</span>
+                    <input
+                      type="text"
+                      value={backgroundDraft.name}
+                      onChange={(event) => updateBackgroundField("name", event.target.value)}
+                      className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900"
+                    />
+                  </label>
+
+                  <label className="block">
+                    <span className="block text-sm font-semibold text-stone-700 mb-1">
+                      {t.animalTypeLabel}
+                    </span>
+                    <input
+                      type="text"
+                      value={backgroundDraft.animalType}
+                      onChange={(event) => updateBackgroundField("animalType", event.target.value)}
+                      className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900"
+                    />
+                  </label>
+                </div>
+
+                <label className="block">
+                  <span className="block text-sm font-semibold text-stone-700 mb-1">{t.biographyLabel}</span>
+                  <textarea
+                    value={backgroundDraft.biography}
+                    onChange={(event) => updateBackgroundField("biography", event.target.value)}
+                    placeholder={t.biographyPlaceholder}
+                    rows={4}
+                    className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900 resize-y"
+                  />
+                </label>
+
+                <label className="block">
+                  <span className="block text-sm font-semibold text-stone-700 mb-1">
+                    {t.appearanceLabel}
+                  </span>
+                  <input
+                    type="text"
+                    value={backgroundDraft.appearance}
+                    onChange={(event) => updateBackgroundField("appearance", event.target.value)}
+                    className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900"
+                  />
+                </label>
+
+                <div>
+                  <div className="flex flex-wrap items-center gap-2 mb-2">
+                    <span className="text-sm font-semibold text-stone-700">{t.motivesLabel}</span>
+                    <span className="text-xs text-stone-700">{t.motivesHint}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {storyOptions.motives.map((motive) => {
+                      const isSelected = backgroundDraft.motives.includes(motive);
+                      return (
+                        <button
+                          type="button"
+                          key={motive}
+                          onClick={() => toggleBackgroundPick("motives", motive, MAX_MOTIVES)}
+                          className={`px-3 py-2 rounded-full text-sm font-semibold transition-colors ${
+                            isSelected
+                              ? "bg-amber-500 text-stone-950"
+                              : "bg-stone-200 text-stone-800 hover:bg-stone-300"
+                          }`}
+                        >
+                          {motive}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                <div className="rounded-xl border border-stone-300 p-3 bg-white space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div>
+                      <span className="text-sm font-semibold text-stone-700">{t.otherMotivesLabel}</span>
+                      <p className="text-xs text-stone-700 mt-1">{t.otherMotivesHint}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={addCustomMotive}
+                      disabled={backgroundDraft.customMotives.length >= MAX_CUSTOM_MOTIVES}
+                      className="px-3 py-2 rounded-lg bg-stone-200 hover:bg-stone-300 text-stone-800 text-sm font-semibold disabled:opacity-45 transition-colors"
+                    >
+                      {t.addOtherMotive}
+                    </button>
+                  </div>
+
+                  {backgroundDraft.customMotives.length > 0 && (
+                    <div className="space-y-3">
+                      {backgroundDraft.customMotives.map((motive, motiveIndex) => (
+                        <div key={motiveIndex} className="rounded-xl border border-stone-200 p-3 bg-stone-50">
+                          <div className="flex items-center justify-between gap-2 mb-2">
+                            <span className="text-xs font-semibold text-stone-700">#{motiveIndex + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => removeCustomMotive(motiveIndex)}
+                              className="px-2.5 py-1.5 rounded-md bg-rose-100 hover:bg-rose-200 text-rose-700 text-sm font-semibold transition-colors"
+                            >
+                              {t.removeOtherMotive}
+                            </button>
+                          </div>
+                          <div className="space-y-2">
+                            <label className="block">
+                              <span className="block text-xs text-stone-700 mb-1">{t.otherMotiveNameLabel}</span>
+                              <input
+                                type="text"
+                                value={motive.title}
+                                placeholder={t.otherMotiveNamePlaceholder}
+                                onChange={(event) =>
+                                  updateCustomMotiveField(motiveIndex, "title", event.target.value)
+                                }
+                                className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900"
+                              />
+                            </label>
+                            <label className="block">
+                              <span className="block text-xs text-stone-700 mb-1">{t.otherMotiveDescriptionLabel}</span>
+                              <textarea
+                                value={motive.description}
+                                placeholder={t.otherMotiveDescriptionPlaceholder}
+                                onChange={(event) =>
+                                  updateCustomMotiveField(motiveIndex, "description", event.target.value)
+                                }
+                                rows={2}
+                                className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900 resize-y"
+                              />
+                            </label>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-stone-700">{t.connectionsLabel}</span>
+                    <button
+                      type="button"
+                      onClick={() => setIsConnectionHelpOpen(true)}
+                      className="px-2.5 py-1.5 rounded-md bg-stone-200 hover:bg-stone-300 text-stone-800 text-sm font-semibold transition-colors"
+                    >
+                      <Info size={13} className="inline mr-1" />
+                      {t.connectionHelpButton}
+                    </button>
+                  </div>
+
+                  {backgroundDraft.connections.map((connection, index) => (
+                    <div key={index} className="rounded-xl border border-stone-300 p-3 bg-white">
+                      <p className="text-[11px] uppercase tracking-wider text-stone-600 mb-2">
+                        {index === 0 ? t.connectionOneLabel : t.connectionTwoLabel}
+                      </p>
+                      <div className="grid sm:grid-cols-2 gap-3">
+                        <label className="block">
+                          <span className="block text-xs text-stone-700 mb-1">{t.connectionRoleLabel}</span>
+                          <select
+                            value={connection.role}
+                            onChange={(event) => updateConnectionField(index, "role", event.target.value)}
+                            className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900"
+                          >
+                            <option value="">-</option>
+                            {storyOptions.connectionRoles.map((role) => (
+                              <option key={`${role}-${index}`} value={role}>
+                                {role}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+
+                        <label className="block">
+                          <span className="block text-xs text-stone-700 mb-1">{t.connectionNameLabel}</span>
+                          <input
+                            type="text"
+                            value={connection.characterName}
+                            placeholder={t.connectionNamePlaceholder}
+                            onChange={(event) =>
+                              updateConnectionField(index, "characterName", event.target.value)
+                            }
+                            className="w-full rounded-lg bg-white border border-stone-300 px-3 py-2 text-sm text-stone-900"
+                          />
+                        </label>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="rounded-xl border border-stone-300 p-3 bg-white space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <span className="text-sm font-semibold text-stone-700">
+                      {t.factionReputationTitle}
+                    </span>
+                    <span className="text-xs text-stone-700">{t.reputationHint}</span>
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] font-semibold uppercase tracking-wider">
+                    <span className="text-rose-700">{t.badFameLabel}</span>
+                    <span className="text-emerald-700">{t.prestigeLabel}</span>
+                  </div>
+
+                  <div className="space-y-3">
+                    {visibleFactions.map((faction, factionIndex) => {
+                      const currentValue = clampReputation(backgroundDraft.factionReputation[factionIndex]);
+
+                      return (
+                        <div key={faction} className="space-y-1">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-sm font-semibold text-stone-900">{faction}</span>
+                            <span
+                              className={`text-xs font-bold ${
+                                currentValue < 0
+                                  ? "text-rose-700"
+                                  : currentValue > 0
+                                  ? "text-emerald-700"
+                                  : "text-stone-600"
+                              }`}
+                            >
+                              {currentValue > 0 ? `+${currentValue}` : currentValue}
+                            </span>
+                          </div>
+
+                          <div className="grid grid-cols-7 gap-1.5">
+                            {REPUTATION_VALUES.map((value) => {
+                              const isActive = currentValue === value;
+                              const isNegative = value < 0;
+                              const isPositive = value > 0;
+
+                              const baseClass = isNegative
+                                ? "border-rose-300 text-rose-700"
+                                : isPositive
+                                ? "border-emerald-300 text-emerald-700"
+                                : "border-stone-300 text-stone-700";
+
+                              const activeClass = isNegative
+                                ? "bg-rose-500 border-rose-600 text-white"
+                                : isPositive
+                                ? "bg-emerald-500 border-emerald-600 text-white"
+                                : "bg-stone-600 border-stone-700 text-white";
+
+                              return (
+                                <button
+                                  key={`${faction}-${value}`}
+                                  type="button"
+                                  onClick={() => setFactionReputation(factionIndex, value)}
+                                  className={`h-8 rounded-md border text-xs font-bold transition-colors ${
+                                    isActive ? activeClass : `${baseClass} bg-white hover:bg-stone-100`
+                                  }`}
+                                >
+                                  {value > 0 ? `+${value}` : value}
+                                </button>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      );
+                    })}
+
+                    {canRevealMoreFactions && (
+                      <button
+                        type="button"
+                        onClick={revealNextFaction}
+                        className="w-full h-10 rounded-lg border border-stone-300 bg-stone-100 text-stone-900 hover:bg-stone-200 text-sm font-semibold transition-colors"
+                      >
+                        {t.addFaction}
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <div className="lg:hidden pt-1 space-y-2">
+                  <button
+                    type="button"
+                    onClick={handleClearBackgroundDraft}
+                    className="w-full px-4 py-2.5 rounded-xl border border-stone-300 bg-white text-stone-900 hover:bg-stone-100 text-sm font-semibold transition-colors"
+                  >
+                    {t.clearBackgroundForm}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleSaveCharacterAndReturn}
+                    className="w-full px-4 py-2.5 rounded-xl bg-amber-600 text-white hover:bg-amber-700 text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <Save size={18} /> {t.saveCharacterAndReturn}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportToPdf}
+                    className="w-full px-4 py-2.5 rounded-xl bg-stone-700 text-white hover:bg-stone-800 text-sm font-semibold flex items-center justify-center gap-2 transition-colors"
+                  >
+                    <FileDown size={18} /> {t.exportPdf}
+                  </button>
+                  {saveNotice && <span className="block text-center text-sm text-emerald-700">{saveNotice}</span>}
+                </div>
+
+              </section>
+            </div>
+          </div>
+        </main>
+
+        {isConnectionHelpOpen && (
+          <div className="fixed inset-0 z-[70] bg-black/45 p-4 overflow-y-auto">
+            <div className="w-full max-w-3xl my-6 mx-auto bg-white rounded-2xl border border-stone-300 p-5 shadow-xl">
+              <div className="flex items-start justify-between gap-3 mb-3">
+                <h3 className="text-xl font-display font-bold text-stone-900">{t.connectionHelpTitle}</h3>
+                <button
+                  type="button"
+                  onClick={() => setIsConnectionHelpOpen(false)}
+                  className="text-stone-500 hover:text-stone-800"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <p className="text-sm text-stone-800 leading-6 mb-4">{t.connectionHelpIntro}</p>
+
+              <div className="space-y-4">
+                {connectionRules.map((rule) => (
+                  <div key={rule.title} className="rounded-xl border border-stone-300 p-3 bg-stone-50">
+                    <h4 className="font-display font-bold text-stone-900 mb-1">{rule.title}</h4>
+                    <p className="text-sm text-stone-800 leading-6">{rule.description}</p>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4">
+                <button
+                  type="button"
+                  onClick={() => setIsConnectionHelpOpen(false)}
+                  className="px-4 py-2 rounded-lg bg-stone-900 text-white hover:bg-stone-950 text-sm font-semibold"
+                >
+                  {t.connectionHelpClose}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  if (activeStep === "profile" && savedCharacterProfile) {
+    const profile = savedCharacterProfile;
+    const profileConnections = Array.isArray(profile.background?.connections)
+      ? profile.background.connections
+      : [];
+
+    return (
+      <div className="min-h-screen bg-stone-100 text-stone-900 font-body relative overflow-x-hidden selection:bg-amber-200">
+        {bgBackdropUrl && (
+          <div className="absolute inset-0 opacity-[0.14] pointer-events-none">
+            <ProgressiveImage
+              src={activeBackground?.url}
+              placeholderSrc={activeBackground?.lowUrl}
+              alt={t.portraitBackgroundAlt}
+              className="w-full h-full"
+              imageClassName="object-cover"
+            />
+          </div>
+        )}
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/aged-paper.png')] opacity-80 pointer-events-none" />
+
+        <div className="relative min-h-screen px-3 sm:px-5 md:px-8 py-4 md:py-6">
+          <div className="max-w-7xl mx-auto space-y-5">
+            <header className="bg-white/90 rounded-2xl border border-stone-300 p-4 md:p-5 shadow-sm flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <h1 className="text-2xl sm:text-3xl font-display font-bold text-stone-900">{t.profileReadyTitle}</h1>
+                <p className="text-sm sm:text-base text-stone-700 mt-1">{t.profileReadySubtitle}</p>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  onClick={() => setActiveStep("builder")}
+                  className="px-3 py-2 rounded-lg bg-stone-700 hover:bg-stone-800 text-white text-sm font-semibold"
+                >
+                  {t.backToBuilder}
+                </button>
+                <button
+                  type="button"
+                  onClick={openBackgroundFromProfile}
+                  className="px-3 py-2 rounded-lg bg-stone-200 text-stone-900 hover:bg-stone-300 text-sm font-semibold"
+                >
+                  {t.editBackground}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => window.print()}
+                  className="px-3 py-2 rounded-lg bg-amber-500 text-stone-950 hover:bg-amber-400 text-sm font-semibold flex items-center gap-2"
+                >
+                  <FileDown size={16} /> {t.exportPdf}
+                </button>
+              </div>
+            </header>
+
+            <div className="grid lg:grid-cols-[minmax(260px,0.78fr)_minmax(0,1.22fr)] gap-4 items-start">
+              <aside className="bg-white/90 rounded-2xl border border-stone-300 p-4 space-y-4 shadow-sm">
+                <div className="relative w-full aspect-[3/4] rounded-xl overflow-hidden">
+                  {activeBackground && (
+                    <ProgressiveImage
+                      src={activeBackground.url}
+                      placeholderSrc={activeBackground.lowUrl}
+                      alt={t.portraitBackgroundAlt}
+                      className="absolute inset-0"
+                      imageClassName="object-cover opacity-55"
+                      loading="eager"
+                    />
+                  )}
+                  <div className="absolute inset-0 bg-stone-100/35" />
+                  {profile.portrait ? (
+                    <div className="absolute inset-0 z-10 flex items-center justify-center">
+                      <img
+                        src={profile.portrait}
+                        alt={t.characterPortraitAlt}
+                        className="w-[94%] h-[96%] object-contain"
+                      />
+                    </div>
+                  ) : (
+                    <div className="absolute inset-0 flex items-center justify-center text-stone-500 text-sm z-10">
+                      {t.characterPortraitAlt}
+                    </div>
+                  )}
+                </div>
+                <div className="text-sm text-stone-800 space-y-1">
+                  <p className="font-semibold text-stone-900">{displayPlaybookName(profile.playbookName)}</p>
+                  {profile.nature && <p>{displayNatureName(profile.nature)}</p>}
+                  <p>{profile.background?.name || "-"}</p>
+                  <p>{profile.background?.animalType || "-"}</p>
+                </div>
+              </aside>
+
+              <section className="space-y-3">
+                <div className="bg-white/90 rounded-2xl border border-stone-300 p-4 shadow-sm">
+                  <h2 className="text-sm uppercase tracking-wider text-stone-600 mb-2">{t.profileSectionBuild}</h2>
+                  <div className="grid sm:grid-cols-2 gap-2 text-sm text-stone-900">
+                    {profile.stats.map((item) => (
+                      <p key={item.stat}>
+                        {i18n.statLabel(item.stat)}: {item.value >= 0 ? `+${item.value}` : item.value}
+                      </p>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-sm text-stone-900">
+                    {t.feats}: {profile.feats.map((feat) => displayFeatName(feat)).join(", ") || "-"}
+                  </p>
+                  <p className="mt-1 text-sm text-stone-900">
+                    {t.skills}: {profile.skills.map((skill) => displaySkillName(skill)).join(", ") || "-"}
+                  </p>
+                  <p className="mt-1 text-sm text-stone-900">
+                    {t.moves}: {profile.moves.map((move) => displayMoveName(profile.playbookName, move)).join(", ") || "-"}
+                  </p>
+                </div>
+
+                <div className="bg-white/90 rounded-2xl border border-stone-300 p-4 shadow-sm">
+                  <h2 className="text-sm uppercase tracking-wider text-stone-600 mb-2">{t.profileSectionBackground}</h2>
+                  <p className="text-sm text-stone-900 whitespace-pre-wrap leading-6">
+                    {profile.background?.biography || "-"}
+                  </p>
+                  <p className="mt-2 text-sm text-stone-900">
+                    {t.motivesLabel}: {(profile.background?.motives || []).join(", ") || "-"}
+                  </p>
+                  {Array.isArray(profile.background?.customMotives) &&
+                    profile.background.customMotives.length > 0 && (
+                      <div className="mt-2 space-y-1 text-sm text-stone-900">
+                        <p className="font-semibold">{t.otherMotivesLabel}:</p>
+                        {profile.background.customMotives.map((motive, motiveIndex) => (
+                          <p key={`${motive?.title || "motive"}-${motiveIndex}`}>
+                            {motive?.title || "-"}: {motive?.description || "-"}
+                          </p>
+                        ))}
+                      </div>
+                    )}
+                  <div className="mt-2 space-y-1 text-sm text-stone-900">
+                    <p className="font-semibold">{t.connectionsLabel}:</p>
+                    {profileConnections.length ? (
+                      profileConnections.map((connection, index) => (
+                        <p key={`${connection.role}-${connection.characterName}-${index}`}>
+                          {index === 0 ? t.connectionOneLabel : t.connectionTwoLabel}: {connection.role || "-"} -{" "}
+                          {connection.characterName || "-"}
+                        </p>
+                      ))
+                    ) : (
+                      <p>-</p>
+                    )}
+                  </div>
+                  <p className="mt-1 text-sm text-stone-900">
+                    {t.appearanceLabel}: {profile.background?.appearance || "-"}
+                  </p>
+                </div>
+
+                <div className="bg-white/90 rounded-2xl border border-stone-300 p-4 shadow-sm">
+                  <h2 className="text-sm uppercase tracking-wider text-stone-600 mb-2">{t.profileSectionStory}</h2>
+                  <div className="space-y-2">
+                    {storyOptions.factions.map((faction, factionIndex) => {
+                      const value = clampReputation(profile.background?.factionReputation?.[factionIndex]);
+                      return (
+                        <div key={`${faction}-profile`} className="flex items-center justify-between text-sm">
+                          <span className="text-stone-900">{faction}</span>
+                          <span
+                            className={`font-semibold ${
+                              value < 0
+                                ? "text-rose-700"
+                                : value > 0
+                                ? "text-emerald-700"
+                                : "text-stone-600"
+                            }`}
+                          >
+                            {value > 0 ? `+${value}` : value}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-3 text-sm text-stone-900">
+                    {t.factionsHelpedLabel}: {(profile.background?.factionsHelped || []).join(", ") || "-"}
+                  </p>
+                  <p className="mt-1 text-sm text-stone-900">
+                    {t.factionsHarmedLabel}: {(profile.background?.factionsHarmed || []).join(", ") || "-"}
+                  </p>
+                </div>
+              </section>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-stone-100 text-stone-900 font-body flex flex-col md:flex-row overflow-x-hidden selection:bg-amber-200">
@@ -1313,6 +2475,7 @@ export default function App() {
                   return (
                     <div
                       key={stat}
+                      data-stat-card={stat}
                       className={`col-span-2 ${mobilePlacement} md:col-auto w-full md:w-32 bg-white/95 rounded-xl border-2 flex flex-col items-center overflow-hidden transition-all shadow-sm ${
                         isBuffed ? "border-emerald-600 ring-2 ring-emerald-200" : "border-stone-300"
                       }`}
@@ -1378,6 +2541,7 @@ export default function App() {
                       return (
                         <label
                           key={feat}
+                          data-feat-key={feat}
                           className={`flex items-center gap-2 w-full ${
                             isDisabled
                               ? isChecked
@@ -1424,6 +2588,7 @@ export default function App() {
                       return (
                         <label
                           key={skill}
+                          data-skill-key={skill}
                           className={`flex items-center gap-2 w-full ${
                             isStartingOption
                               ? "cursor-pointer group font-bold text-emerald-800"
@@ -1468,61 +2633,91 @@ export default function App() {
                 </span>
               </div>
 
-              <div className="grid md:grid-cols-2 gap-4 lg:gap-6 min-w-0">
-                {playbook.moves.map((move) => {
-                  const isChecked = currentState.moves.includes(move.name);
-                  const isMandatory = playbook.startingMoves.includes(move.name);
-                  const isDisabled = !isChecked && !isMandatory && hasReachedMoveLimit;
+              <div className="grid lg:grid-cols-[minmax(0,0.75fr)_minmax(0,1.25fr)] gap-3 lg:gap-5 min-w-0">
+                <div className="min-w-0">
+                  <div className="rounded-xl border border-stone-300 bg-white/90 shadow-sm overflow-hidden">
+                    <div className="divide-y divide-stone-200/80">
+                    {playbook.moves.map((move) => {
+                      const isChecked = currentState.moves.includes(move.name);
+                      const isMandatory = playbook.startingMoves.includes(move.name);
+                      const isDisabled = !isChecked && !isMandatory && hasReachedMoveLimit;
+                      const isActive = activeMove?.name === move.name;
 
-                  return (
-                    <div
-                      key={move.name}
-                      className={`rounded-xl shadow-sm border p-4 md:p-5 transition-all flex flex-col min-w-0 group ${
-                        isChecked ? "border-blue-500 ring-1 ring-blue-500 bg-blue-50/40" : "border-stone-300"
-                      } ${
-                        isDisabled
-                          ? "opacity-60 bg-stone-100 cursor-not-allowed"
-                          : "bg-white/95 cursor-pointer hover:border-blue-400"
-                      }`}
-                      onClick={() => {
-                        if (!isDisabled) handleMoveToggle(move.name, isMandatory);
-                      }}
-                    >
-                      <div className="flex items-start gap-3 min-w-0">
-                        <div className="mt-1 flex-shrink-0">
-                          {isChecked ? (
-                            <CheckSquare className={isMandatory ? "text-blue-500" : "text-blue-700"} size={20} />
-                          ) : (
-                            <Square
-                              className={`text-stone-400 transition-colors ${
-                                isDisabled ? "" : "group-hover:text-blue-400"
-                              }`}
-                              size={20}
-                            />
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <h4
-                            className={`font-display font-bold text-base md:text-lg mb-2 break-words ${
-                              isChecked ? "text-blue-950" : "text-stone-950"
-                            }`}
+                      return (
+                        <div
+                          key={move.name}
+                          className={`w-full flex items-center justify-between gap-3 px-3 py-3 text-left transition-colors min-w-0 ${
+                            isActive
+                              ? "bg-blue-100/90 ring-1 ring-inset ring-blue-400"
+                              : "bg-white hover:bg-stone-50/80"
+                          } ${isDisabled ? "opacity-70" : ""}`}
+                        >
+                          <button
+                            type="button"
+                            onClick={() => setActiveMoveName(move.name)}
+                            className="flex-1 min-w-0 text-left"
                           >
-                            {displayMoveName(playbook.name, move.name)}
+                            <span
+                              className={`font-display font-bold text-sm md:text-base break-words ${
+                                isActive ? "text-blue-950" : "text-stone-900"
+                              }`}
+                            >
+                              {displayMoveName(playbook.name, move.name)}
+                            </span>
                             {isMandatory && (
-                              <span className="inline-block ml-2 mb-1 text-[10px] font-bold tracking-wider text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full align-middle">
+                              <span className="inline-block ml-2 text-[10px] font-bold tracking-wider text-blue-700 bg-blue-100 px-2 py-0.5 rounded-full align-middle">
                                 {t.starting}
                               </span>
                             )}
-                          </h4>
-                          <div className="text-sm text-stone-800 whitespace-pre-wrap leading-7 break-words">
-                            {displayMoveDescription(playbook.name, move.name, move.desc)}
-                          </div>
+                          </button>
+
+                          <button
+                            type="button"
+                            aria-label={displayMoveName(playbook.name, move.name)}
+                            disabled={isMandatory || isDisabled}
+                            onClick={() => {
+                              handleMoveToggle(move.name, isMandatory);
+                              setActiveMoveName(move.name);
+                            }}
+                            className="flex-shrink-0 w-8 h-8 rounded-md border border-stone-300 bg-stone-50 flex items-center justify-center text-stone-500 hover:text-blue-700 hover:border-blue-400 disabled:opacity-45 disabled:hover:text-stone-500 disabled:hover:border-stone-300 transition-colors"
+                          >
+                            {isChecked ? (
+                              <CheckSquare className={isMandatory ? "text-blue-500" : "text-blue-700"} size={18} />
+                            ) : (
+                              <Square className={isActive ? "text-blue-500" : "text-stone-400"} size={18} />
+                            )}
+                          </button>
                         </div>
-                      </div>
+                      );
+                    })}
                     </div>
-                  );
-                })}
+                  </div>
+                </div>
+
+                <div className="bg-white/95 rounded-xl border border-blue-200 p-4 md:p-6 shadow-sm min-w-0 min-h-[240px]">
+                  {activeMove && (
+                    <>
+                      <div className="text-sm text-stone-800 whitespace-pre-wrap leading-7 break-words">
+                        {displayMoveDescription(playbook.name, activeMove.name, activeMove.desc)}
+                      </div>
+                    </>
+                  )}
+                </div>
               </div>
+            </div>
+
+            <div className="pt-1">
+              {isBuilderReady ? (
+                <button
+                  type="button"
+                  onClick={openBackgroundStep}
+                  className="w-full sm:w-auto px-6 py-3 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-base font-display font-bold tracking-wide shadow-sm transition-colors"
+                >
+                  {t.goToBackgroundPage}
+                </button>
+              ) : (
+                <p className="text-sm text-stone-600">{t.builderIncompleteHint}</p>
+              )}
             </div>
           </div>
         </div>

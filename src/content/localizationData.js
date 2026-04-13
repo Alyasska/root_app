@@ -36,6 +36,63 @@ export const uiText = {
     characterPortraitAlt: "Портрет персонажа",
     movesHeaderWithStarting: (startingStr, count) => `Стартовые: ${startingStr}. Выберите ещё: ${count}.`,
     movesHeaderAny: (count) => `Свободный выбор: ${count} ходов.`,
+    builderIncompleteHint: "Заполните обязательные выборы, чтобы перейти к анкете персонажа.",
+    goToBackgroundPage: "Создать своего персонажа",
+    backgroundPageTitle: "",
+    backgroundPageSubtitle: "",
+    backToBuilder: "Назад к выбору",
+    backToBuilderWarning: "Несохраненные данные анкеты будут потеряны. Вернуться назад?",
+    backWithoutSaving: "Вернуться без сохранения",
+    progressLabel: "Прогресс анкеты",
+    saveCharacter: "Сохранить персонажа",
+    saveCharacterAndReturn: "Сохранить и вернуться",
+    clearBackgroundForm: "Очистить анкету",
+    saveDone: "Сохранено локально",
+    exportPdf: "Экспортировать в PDF",
+    profileReadyTitle: "Готовый персонаж",
+    profileReadySubtitle: "Профиль собран из данных буклета и личного бэкграунда.",
+    editBackground: "Редактировать анкету",
+    nameLabel: "Имя",
+    animalTypeLabel: "Тип животного",
+    appearanceLabel: "Внешние приметы (опционально)",
+    biographyLabel: "Короткая биография",
+    biographyPlaceholder: "2-4 предложения о прошлом и текущем пути персонажа...",
+    motivesLabel: "Мотивы (выберите 2)",
+    motivesHint: "Ровно 2 мотива раскрывают цель персонажа.",
+    otherMotivesLabel: "Другие мотивы",
+    otherMotivesHint: "Можно добавить до двух собственных мотивов с описанием.",
+    addOtherMotive: "Добавить мотив",
+    removeOtherMotive: "Удалить",
+    otherMotiveNameLabel: "Название мотива",
+    otherMotiveDescriptionLabel: "Описание",
+    otherMotiveNamePlaceholder: "Например: Искупить вину",
+    otherMotiveDescriptionPlaceholder: "Коротко: зачем это важно для персонажа.",
+    connectionsLabel: "Связи",
+    connectionOneLabel: "Связь 1",
+    connectionTwoLabel: "Связь 2",
+    connectionRoleLabel: "Роль",
+    connectionNameLabel: "Имя другого персонажа",
+    connectionNamePlaceholder: "Например: Арло",
+    connectionHelpButton: "Правила связей",
+    connectionHelpTitle: "Связи",
+    connectionHelpIntro:
+      "На каждом бланке персонажа есть две связи, которые нужно заполнить для игры. На каждую связь распространяются особые правила. Прочитайте их всех, чтобы все участники связи о них знали.",
+    connectionHelpClose: "Закрыть",
+    behaviorTraitsLabel: "Черты поведения",
+    behaviorTraitsHint: "Выберите до 2 наиболее заметных черт.",
+    factionReputationTitle: "Репутация фракций",
+    badFameLabel: "Дурная слава",
+    prestigeLabel: "Престиж",
+    reputationHint: "Отмечайте уровень от -3 до +3 кликом по ячейке.",
+    addFaction: "Добавить фракцию",
+    factionsHelpedLabel: "Фракции, которым помогали",
+    factionsHarmedLabel: "Фракции, которым навредили",
+    imageOverrideLabel: "Изображение для анкеты (опционально)",
+    imageOverrideHint: "Если не загружать, будет использован портрет с первого экрана.",
+    profileSectionBuild: "Сборка буклета",
+    profileSectionBackground: "Бэкграунд",
+    profileSectionStory: "Репутация и связи",
+    fillRequiredBeforeExport: "Заполните обязательные поля анкеты перед экспортом.",
   },
   en: {
     appTitle: "Playbooks",
@@ -74,6 +131,63 @@ export const uiText = {
     characterPortraitAlt: "Character portrait",
     movesHeaderWithStarting: (startingStr, count) => `Starting: ${startingStr}. Choose ${count} more.`,
     movesHeaderAny: (count) => `Choose any ${count} moves.`,
+    builderIncompleteHint: "Complete required picks to open the character background page.",
+    goToBackgroundPage: "Create your character",
+    backgroundPageTitle: "",
+    backgroundPageSubtitle: "",
+    backToBuilder: "Back to builder",
+    backToBuilderWarning: "Unsaved background data will be lost. Return anyway?",
+    backWithoutSaving: "Back without saving",
+    progressLabel: "Background progress",
+    saveCharacter: "Save character",
+    saveCharacterAndReturn: "Save and return",
+    clearBackgroundForm: "Clear form",
+    saveDone: "Saved locally",
+    exportPdf: "Export to PDF",
+    profileReadyTitle: "Character Profile",
+    profileReadySubtitle: "Compiled from playbook choices and personal background.",
+    editBackground: "Edit background",
+    nameLabel: "Name",
+    animalTypeLabel: "Animal type",
+    appearanceLabel: "Appearance details (optional)",
+    biographyLabel: "Short biography",
+    biographyPlaceholder: "Write 2-4 lines about past events and present goals...",
+    motivesLabel: "Motives (pick 2)",
+    motivesHint: "Exactly 2 motives define your character's drive.",
+    otherMotivesLabel: "Other motives",
+    otherMotivesHint: "You can add up to two custom motives with descriptions.",
+    addOtherMotive: "Add motive",
+    removeOtherMotive: "Remove",
+    otherMotiveNameLabel: "Motive name",
+    otherMotiveDescriptionLabel: "Description",
+    otherMotiveNamePlaceholder: "Example: Redeem the past",
+    otherMotiveDescriptionPlaceholder: "Briefly: why this matters to the character.",
+    connectionsLabel: "Connections",
+    connectionOneLabel: "Connection 1",
+    connectionTwoLabel: "Connection 2",
+    connectionRoleLabel: "Role",
+    connectionNameLabel: "Other character name",
+    connectionNamePlaceholder: "Example: Arlo",
+    connectionHelpButton: "Connection rules",
+    connectionHelpTitle: "Connections",
+    connectionHelpIntro:
+      "Each character sheet has two connections that must be filled for play. Every connection has specific rules. Read all of them so every participant understands what applies.",
+    connectionHelpClose: "Close",
+    behaviorTraitsLabel: "Behavior traits",
+    behaviorTraitsHint: "Pick up to 2 dominant traits.",
+    factionReputationTitle: "Faction Reputation",
+    badFameLabel: "Bad Fame",
+    prestigeLabel: "Prestige",
+    reputationHint: "Click a box to set value from -3 to +3.",
+    addFaction: "Add faction",
+    factionsHelpedLabel: "Factions helped",
+    factionsHarmedLabel: "Factions harmed",
+    imageOverrideLabel: "Profile image (optional)",
+    imageOverrideHint: "If empty, the portrait from the first screen is used.",
+    profileSectionBuild: "Playbook Setup",
+    profileSectionBackground: "Background",
+    profileSectionStory: "Reputation & Connections",
+    fillRequiredBeforeExport: "Complete required fields before exporting.",
   },
 };
 
@@ -398,6 +512,120 @@ export const natureDescEnByKey = {
   "Скиталец::Обжора": "Clear your exhaustion track when indulgence or appetite gets you useful leverage.",
 };
 
+export const characterStoryOptions = {
+  ru: {
+    motives: [
+      "Амбиции",
+      "Месть",
+      "Защита близких",
+      "Свобода",
+      "Приключения",
+      "Долг"
+    ],
+    connectionRoles: [
+      "Защитник",
+      "Партнёр",
+      "Наблюдатель",
+      "Профессионал"
+    ],
+    behaviorTraits: [
+      "Циничный",
+      "Любопытный",
+      "Оптимистичный",
+      "Осторожный",
+      "Импульсивный",
+      "Хладнокровный"
+    ],
+    factions: [
+      "Маркиса де Котэ",
+      "Династии Эйри",
+      "Лесной Альянс",
+      "Речное Братство",
+      "Кроты Подполья",
+      "Хранители в Железе"
+    ]
+  },
+  en: {
+    motives: [
+      "Ambition",
+      "Revenge",
+      "Protection",
+      "Freedom",
+      "Adventure",
+      "Duty"
+    ],
+    connectionRoles: [
+      "Defender",
+      "Partner",
+      "Observer",
+      "Professional"
+    ],
+    behaviorTraits: [
+      "Cynical",
+      "Curious",
+      "Optimistic",
+      "Cautious",
+      "Impulsive",
+      "Calm under pressure"
+    ],
+    factions: [
+      "Marquise de Cat",
+      "Eyrie Dynasties",
+      "Woodland Alliance",
+      "Riverfolk Company",
+      "Underground Duchy",
+      "Keepers in Iron"
+    ]
+  }
+};
+
+export const connectionRules = {
+  ru: [
+    {
+      title: "Защитник",
+      description:
+        "Когда защищаемый находится в пределах досягаемости защитника, игрок, управляющий защитником, может отметить источник защитника, чтобы тот принял на себя удар, предотвращая нападение. После этого его игрок получает +1 к результатам бросков оружейных ходов."
+    },
+    {
+      title: "Партнёр",
+      description:
+        "Выбрав эту связь, один игрок и другой, с ПИО связаны ПИО первого игрока, должна отметить 2 ячейки престиж и фракцию, которая помогла первой ПИО и 2 ячейки драйф, выбранной фракцией. Эти два служат для задания ТРО."
+    },
+    {
+      title: "Наблюдатель",
+      description:
+        "Если ПИ помогает понять того, с кем связан, то игрок, управляющий этим ПИ, получает +1 к его броску. Когда этот ПИ уступает того, с кем связан, тот может позволить ему очистить 2 источника вместе с одним."
+    },
+    {
+      title: "Профессионал",
+      description:
+        "Если ПИ делится с тем, с кем связан, информацией после анализа сложных ситуаций, он помогает, чтобы они помогли задвигать данные и использовать на основе искусства."
+    }
+  ],
+  en: [
+    {
+      title: "Defender",
+      description:
+        "When the defended is within range of the defender, the player controlling the defender may mark the defender's source to take the hit, preventing an attack. After this, the player controlling the defender gains +1 to weapon move rolls."
+    },
+    {
+      title: "Partner",
+      description:
+        "Choosing this connection, one player and another, connected by the PIO, must mark 2 cells for prestige and faction to help one first PIO and 2 cells for drive, selected by the faction. These will form the basis of the connection."
+    },
+    {
+      title: "Observer",
+      description:
+        "If PIO helps understand the person they are linked to, the controlling player of this PIO gets +1 to their roll. When this PIO yields their linked partner, the linked player may allow them to clear two sources together."
+    },
+    {
+      title: "Professional",
+      description:
+        "If the PIO shares with someone they are linked to, analyzing complex situations, it assists them to shift data for use in based techniques."
+    }
+  ]
+};
+
 const localizationData = {
   uiText,
   statLabel,
@@ -408,6 +636,8 @@ const localizationData = {
   skillNameEn,
   moveNameEnByPlaybook,
   natureDescEnByKey,
+  characterStoryOptions,
+  connectionRules,
 };
 
 export default localizationData;

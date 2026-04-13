@@ -1,11 +1,34 @@
-import { statsData } from "./content/statsData.js";
+import { tooltipData } from "./content/statsData.js";
 
 const LANGUAGE_KEY = "root-playbook-lang-v1";
-const TOOLTIP_SELECTOR = "[data-stat-key]";
 const TOOLTIP_THEME = "forest-rpg";
 const FULL_CONTENT_REVEAL_MS = 2600;
 const validLanguages = new Set(["ru", "en"]);
 const tooltipInstances = new Map();
+const TOOLTIP_BINDINGS = [
+  {
+    selector: "[data-stat-key]",
+    category: "stats",
+    keyAttr: "statKey",
+    placement: "top",
+    offset: [0, -4],
+    triggerSelector: "[data-stat-card]",
+  },
+  {
+    selector: "[data-feat-key]",
+    category: "feats",
+    keyAttr: "featKey",
+    placement: "top",
+    offset: [0, 8],
+  },
+  {
+    selector: "[data-skill-key]",
+    category: "skills",
+    keyAttr: "skillKey",
+    placement: "top",
+    offset: [0, 8],
+  },
+];
 
 const isTouchDevice =
   window.matchMedia("(hover: none)").matches ||
@@ -16,8 +39,12 @@ const normalizeLanguage = (value) => (validLanguages.has(value) ? value : "en");
 
 let currentLanguage = normalizeLanguage(localStorage.getItem(LANGUAGE_KEY));
 
-const getDescription = (statKey, language) => {
-  return statsData[language]?.[statKey] || statsData.ru?.[statKey] || "";
+const getDescription = (category, itemKey, language) => {
+  return (
+    tooltipData[language]?.[category]?.[itemKey] ||
+    tooltipData.ru?.[category]?.[itemKey] ||
+    ""
+  );
 };
 
 const capitalizeFirstChar = (text) => {
@@ -68,9 +95,8 @@ const clearRevealTimer = (record) => {
 const refreshTooltipLanguage = (nextLanguage) => {
   currentLanguage = normalizeLanguage(nextLanguage);
 
-  tooltipInstances.forEach((record, element) => {
-    const statKey = element.dataset.statKey;
-    const fullContent = getDescription(statKey, currentLanguage);
+  tooltipInstances.forEach((record) => {
+    const fullContent = getDescription(record.category, record.itemKey, currentLanguage);
     const segments = getTooltipSegments(fullContent);
     record.shortContent = segments.shortContent;
     record.revealContent = segments.revealContent;
@@ -81,24 +107,35 @@ const refreshTooltipLanguage = (nextLanguage) => {
 
 const cleanupDetachedInstances = () => {
   tooltipInstances.forEach((record, element) => {
-    if (element.isConnected) return;
+    const anchorDetached = !element.isConnected;
+    const triggerDetached = record.triggerElement && !record.triggerElement.isConnected;
+    if (!anchorDetached && !triggerDetached) return;
+
     clearRevealTimer(record);
     record.instance.destroy();
     tooltipInstances.delete(element);
   });
 };
 
-const upsertTooltip = (element) => {
-  const statKey = element.dataset.statKey;
-  if (!statKey) return;
+const upsertTooltip = (element, binding) => {
+  const itemKey = element.dataset[binding.keyAttr];
+  if (!itemKey) return;
 
-  const fullContent = getDescription(statKey, currentLanguage);
+  const fullContent = getDescription(binding.category, itemKey, currentLanguage);
   const segments = getTooltipSegments(fullContent);
   const shortContent = segments.shortContent;
   if (!shortContent) return;
 
+  const triggerElement =
+    !isTouchDevice && binding.triggerSelector
+      ? element.closest(binding.triggerSelector) || element
+      : element;
+
   const existingRecord = tooltipInstances.get(element);
   if (existingRecord) {
+    existingRecord.category = binding.category;
+    existingRecord.itemKey = itemKey;
+    existingRecord.triggerElement = triggerElement;
     existingRecord.shortContent = shortContent;
     existingRecord.revealContent = segments.revealContent;
     clearRevealTimer(existingRecord);
@@ -115,6 +152,9 @@ const upsertTooltip = (element) => {
     trigger: isTouchDevice ? "click" : "mouseenter focus",
     hideOnClick: true,
     touch: true,
+    placement: binding.placement,
+    offset: binding.offset,
+    triggerTarget: triggerElement,
     onShow(currentInstance) {
       const record = tooltipInstances.get(element);
       if (!record) return;
@@ -144,18 +184,24 @@ const upsertTooltip = (element) => {
 
   tooltipInstances.set(element, {
     instance,
+    category: binding.category,
+    itemKey,
+    triggerElement,
     shortContent,
     revealContent: segments.revealContent,
     revealTimer: null,
   });
 };
 
-const bindStatTooltips = () => {
+const bindTooltips = () => {
   if (typeof window.tippy !== "function") return;
 
-  document.querySelectorAll(TOOLTIP_SELECTOR).forEach((element) => {
-    upsertTooltip(element);
+  TOOLTIP_BINDINGS.forEach((binding) => {
+    document.querySelectorAll(binding.selector).forEach((element) => {
+      upsertTooltip(element, binding);
+    });
   });
+
   cleanupDetachedInstances();
 };
 
@@ -166,12 +212,12 @@ const syncLanguageFromStorage = () => {
   }
 };
 
-bindStatTooltips();
+bindTooltips();
 
 const rootNode = document.getElementById("root");
 if (rootNode) {
   const observer = new MutationObserver(() => {
-    bindStatTooltips();
+    bindTooltips();
     syncLanguageFromStorage();
   });
 
